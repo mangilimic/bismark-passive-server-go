@@ -1,0 +1,83 @@
+package bismarkpassive;
+
+message PacketSeriesEntry {
+  optional int64 timestamp_microseconds = 1;
+  optional int32 size = 2;
+  optional int32 flow_id = 3;
+}
+
+message FlowTableEntry {
+  optional int32 flow_id = 1;
+  optional bool source_ip_anonymized = 2;
+  optional string source_ip = 3;
+  optional bool destination_ip_anonymized = 4;
+  optional string destination_ip = 5;
+  optional int32 transport_protocol = 6;
+  optional int32 source_port = 7;
+  optional int32 destination_port = 8;
+}
+
+message DnsARecord {
+  optional int32 packet_id = 1;
+  optional int32 address_id = 2;
+  optional bool anonymized = 3;
+  optional string domain = 4;
+  optional string ip_address = 5;
+  optional int32 ttl = 6;
+}
+
+message DnsCnameRecord {
+  optional int32 packet_id = 1;
+  optional int32 address_id = 2;
+  optional bool domain_anonymized = 3;
+  optional string domain = 4;
+  optional bool cname_anonymized = 5;
+  optional string cname = 6;
+  optional int32 ttl = 7;
+}
+
+message AddressTableEntry {
+  optional string mac_address = 1;
+  optional string ip_address = 2;
+}
+
+message DroppedPacketsEntry {
+  optional uint32 size = 1;
+  optional uint32 count = 2;
+}
+
+message Trace {
+  optional int32 file_format_version = 1;
+  optional string build_id = 2;
+  optional string node_id = 3;
+  optional int64 process_start_time_microseconds = 4;
+  optional int32 sequence_number = 5;
+  optional int64 trace_creation_timestamp = 6;
+  optional uint32 pcap_received = 7;
+  optional uint32 pcap_dropped = 8;
+  optional uint32 interface_droppped = 9;
+
+  repeated string whitelist = 10;
+
+  optional string anonymization_signature = 11;
+
+  optional uint32 packet_series_dropped = 12;
+  repeated PacketSeriesEntry packet_series = 13;
+
+  optional int64 flow_table_baseline = 14;
+  optional uint32 flow_table_size = 15;
+  optional int32 flow_table_expired = 16;
+  optional int32 flow_table_dropped = 17;
+  repeated FlowTableEntry flow_table_entry = 18;
+
+  optional int32 a_records_dropped = 19;
+  repeated DnsARecord a_record = 20;
+  optional int32 cname_records_dropped = 21;
+  repeated DnsCnameRecord cname_record = 22;
+
+  optional int32 address_table_first_id = 23;
+  optional int32 address_table_size = 24;
+  repeated AddressTableEntry address_table_entry = 25;
+
+  repeated DroppedPacketsEntry dropped_packets = 26;
+}
