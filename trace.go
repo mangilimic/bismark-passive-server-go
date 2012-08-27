@@ -22,6 +22,29 @@ const (
     SectionDropStatistics
 )
 
+func (s Section) String() string {
+    if s == SectionIntro {
+        return "intro"
+    } else if s == SectionWhitelist {
+        return "whitelist"
+    } else if s == SectionAnonymization {
+        return "anonymization"
+    } else if s == SectionPacketSeries {
+        return "packet series"
+    } else if s == SectionFlowTable {
+        return "flow table"
+    } else if s == SectionDnsTableA {
+        return "DNS A records"
+    } else if s == SectionDnsTableCname {
+        return "DNS CNAME records"
+    } else if s == SectionAddressTable {
+        return "MAC addresses"
+    } else if s == SectionDropStatistics {
+        return "drop statistics"
+    }
+    return "unknown"
+}
+
 type TraceParseError struct {
     Section Section
     Suberror error
@@ -31,7 +54,7 @@ func (e *TraceParseError) Error() string {
     return fmt.Sprintf("Section %s %s", e.Section, e.Suberror)
 }
 
-func NewTraceParseError(section Section, suberror error) error {
+func newTraceParseError(section Section, suberror error) error {
     return &TraceParseError{section, suberror}
 }
 
@@ -190,11 +213,11 @@ func makeTraceFromSections(sections [][]string) (*Trace, error) {
 
     for section, parse := range sectionsMap {
         if len(sections) <= int(section) {
-            return nil, NewTraceParseError(section, newSectionError("missing", nil))
+            return nil, newTraceParseError(section, newSectionError("missing", nil))
         }
         sectionErr := parse(sections[int(section)], trace)
         if sectionErr != nil {
-            return nil, NewTraceParseError(section, sectionErr)
+            return nil, newTraceParseError(section, sectionErr)
         }
     }
 
