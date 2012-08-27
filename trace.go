@@ -41,7 +41,7 @@ type sectionError struct {
 }
 
 func (e *sectionError) Error() string {
-    if (e.Suberror == nil) {
+    if e.Suberror == nil {
         return e.Message
     }
     return fmt.Sprintf("%s: %s", e.Message, e.Suberror)
@@ -51,7 +51,7 @@ func newSectionError(message string, suberror error) error {
     return &sectionError{message, suberror};
 }
 
-func parseSections(lines [][]byte) ([][]string) {
+func linesToSections(lines [][]byte) ([][]string) {
     sections := [][]string{}
     currentSection := []string{}
     for _, line := range(lines) {
@@ -76,23 +76,107 @@ func atoi32(s string) (int32, error) {
     return int32(parsed), nil
 }
 
+func atou32(s string) (uint32, error) {
+    parsed, err := strconv.ParseUint(s, 0, 32)
+    if err != nil {
+        return 0, err
+    }
+    return uint32(parsed), nil
+}
+
+func atoi64(s string) (int64, error) {
+    parsed, err := strconv.ParseInt(s, 0, 64)
+    if err != nil {
+        return 0, err
+    }
+    return int64(parsed), nil
+}
+
 func words(s string) []string {
     return strings.Split(s, " ");
 }
 
 func parseSectionIntro(section []string, trace *Trace) error {
-    if (len(section) < 1) {
-        return newSectionError("missing first line", nil);
+    if len(section) < 1 {
+        return newSectionError("missing first line", nil)
     }
-    introWords := strings.Split(section[0], " ")
-    if len(introWords) < 1 {
-        return newSectionError("missing file format version", nil);
+    firstLineWords := words(section[0])
+    if len(firstLineWords) < 1 {
+        return newSectionError("missing file format version", nil)
     }
-    fileFormatVersion, err := atoi32(introWords[0])
-    if err != nil {
-        return newSectionError("has invalid file format version", err);
+    if fileFormatVersion, err := atoi32(firstLineWords[0]); err != nil {
+        return newSectionError("has invalid file format version", err)
+    } else {
+        trace.FileFormatVersion = &fileFormatVersion
     }
-    trace.FileFormatVersion = &fileFormatVersion
+
+    if len(section) < 2 {
+        return newSectionError("missing second line", nil)
+    }
+    secondLineWords := words(section[1])
+    if len(secondLineWords) < 1 {
+        return newSectionError("missing build id", nil)
+    }
+    trace.BuildId = &secondLineWords[0]
+
+    if len(section) < 3 {
+        return newSectionError("missing third line", nil)
+    }
+    thirdLineWords := words(section[2])
+    if len(thirdLineWords) < 1 {
+        return newSectionError("missing node id", nil)
+    } else if len(thirdLineWords) < 2 {
+        return newSectionError("missing process start time", nil)
+    } else if len(thirdLineWords) < 3 {
+        return newSectionError("missing sequence number", nil)
+    } else if len(thirdLineWords) < 4 {
+        return newSectionError("missing trace creation timestamp", nil)
+    }
+    trace.NodeId = &thirdLineWords[0]
+    if processStartTimeMicroseconds, err := atoi64(thirdLineWords[1]); err != nil {
+        return newSectionError("has invalid process start time", err)
+    } else {
+        trace.ProcessStartTimeMicroseconds = &processStartTimeMicroseconds
+    }
+    if sequenceNumber, err := atoi32(thirdLineWords[2]); err != nil {
+        return newSectionError("has invalid sequence number", err)
+    } else {
+        trace.SequenceNumber = &sequenceNumber
+    }
+    if traceCreationTimestamp, err := atoi64(thirdLineWords[3]); err != nil {
+        return newSectionError("has invalid trace creation tiemstamp", err)
+    } else {
+        trace.TraceCreationTimestamp = &traceCreationTimestamp
+    }
+
+    if len(section) < 4 {
+        // Missing PCAP statistics is ok, for compatibility.
+        return nil
+    }
+    fourthLineWords := words(section[3])
+    if len(fourthLineWords) < 1 {
+        return newSectionError("missing PCAP received", nil)
+    } else if len(fourthLineWords) < 2 {
+        return newSectionError("missing PCAP dropped", nil)
+    } else if len(fourthLineWords) < 3 {
+        return newSectionError("missing interface dropped", nil)
+    }
+    if pcapReceived, err := atou32(fourthLineWords[0]); err != nil {
+        return newSectionError("invalid PCAP received", err)
+    } else {
+        trace.PcapReceived = &pcapReceived
+    }
+    if pcapDropped, err := atou32(fourthLineWords[1]); err != nil {
+        return newSectionError("invalid PCAP dropped", err)
+    } else {
+        trace.PcapDropped = &pcapDropped
+    }
+    if interfaceDropped, err := atou32(fourthLineWords[2]); err != nil {
+        return newSectionError("invalid interface dropped", err)
+    } else {
+        trace.InterfaceDropped = &interfaceDropped
+    }
+
     return nil
 }
 
@@ -123,7 +207,7 @@ func ParseTrace(source io.Reader) (*Trace, error) {
         return nil, err
     }
     lines := bytes.Split(contents, []byte{'\n'})
-    sections := parseSections(lines)
+    sections := linesToSections(lines)
     trace, err := makeTraceFromSections(sections)
     if err != nil {
         return nil, err

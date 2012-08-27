@@ -55,7 +55,7 @@ message Trace {
   optional int64 trace_creation_timestamp = 6;
   optional uint32 pcap_received = 7;
   optional uint32 pcap_dropped = 8;
-  optional uint32 interface_droppped = 9;
+  optional uint32 interface_dropped = 9;
 
   repeated string whitelist = 10;
 
