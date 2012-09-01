@@ -23,24 +23,24 @@ const (
 	SectionDropStatistics
 )
 
-func (s Section) String() string {
-	if s == SectionIntro {
+func (section Section) String() string {
+	if section == SectionIntro {
 		return "intro"
-	} else if s == SectionWhitelist {
+	} else if section == SectionWhitelist {
 		return "whitelist"
-	} else if s == SectionAnonymization {
+	} else if section == SectionAnonymization {
 		return "anonymization"
-	} else if s == SectionPacketSeries {
+	} else if section == SectionPacketSeries {
 		return "packet series"
-	} else if s == SectionFlowTable {
+	} else if section == SectionFlowTable {
 		return "flow table"
-	} else if s == SectionDnsTableA {
+	} else if section == SectionDnsTableA {
 		return "DNS A records"
-	} else if s == SectionDnsTableCname {
+	} else if section == SectionDnsTableCname {
 		return "DNS CNAME records"
-	} else if s == SectionAddressTable {
+	} else if section == SectionAddressTable {
 		return "MAC addresses"
-	} else if s == SectionDropStatistics {
+	} else if section == SectionDropStatistics {
 		return "drop statistics"
 	}
 	return "unknown"
@@ -51,8 +51,8 @@ type TraceParseError struct {
 	Suberror error
 }
 
-func (e *TraceParseError) Error() string {
-	return fmt.Sprintf("Section %s %s", e.Section, e.Suberror)
+func (err *TraceParseError) Error() string {
+	return fmt.Sprintf("Section %s %s", err.Section, err.Suberror)
 }
 
 func newTraceParseError(section Section, suberror error) error {
@@ -64,11 +64,11 @@ type sectionError struct {
 	Suberror error
 }
 
-func (e *sectionError) Error() string {
-	if e.Suberror == nil {
-		return e.Message
+func (err *sectionError) Error() string {
+	if err.Suberror == nil {
+		return err.Message
 	}
-	return fmt.Sprintf("%s: %s", e.Message, e.Suberror)
+	return fmt.Sprintf("%s: %s", err.Message, err.Suberror)
 }
 
 func newSectionError(message string, suberror error) error {
@@ -100,31 +100,31 @@ func atoi32(s string) (int32, error) {
 	return int32(parsed), nil
 }
 
-func atou32(s string) (uint32, error) {
-	parsed, err := strconv.ParseUint(s, 0, 32)
+func atou32(str string) (uint32, error) {
+	parsed, err := strconv.ParseUint(str, 0, 32)
 	if err != nil {
 		return 0, err
 	}
 	return uint32(parsed), nil
 }
 
-func atoi64(s string) (int64, error) {
-	parsed, err := strconv.ParseInt(s, 0, 64)
+func atoi64(str string) (int64, error) {
+	parsed, err := strconv.ParseInt(str, 0, 64)
 	if err != nil {
 		return 0, err
 	}
 	return int64(parsed), nil
 }
 
-func words(s string) []string {
-	return strings.Split(s, " ")
+func words(str string) []string {
+	return strings.Split(str, " ")
 }
 
-func parseSectionIntro(section []string, trace *Trace) error {
-	if len(section) < 1 {
+func parseSectionIntro(sectionLines []string, trace *Trace) error {
+	if len(sectionLines) < 1 {
 		return newSectionError("missing first line", nil)
 	}
-	firstLineWords := words(section[0])
+	firstLineWords := words(sectionLines[0])
 	if len(firstLineWords) < 1 {
 		return newSectionError("missing file format version", nil)
 	}
@@ -134,19 +134,19 @@ func parseSectionIntro(section []string, trace *Trace) error {
 		trace.FileFormatVersion = &fileFormatVersion
 	}
 
-	if len(section) < 2 {
+	if len(sectionLines) < 2 {
 		return newSectionError("missing second line", nil)
 	}
-	secondLineWords := words(section[1])
+	secondLineWords := words(sectionLines[1])
 	if len(secondLineWords) < 1 {
 		return newSectionError("missing build id", nil)
 	}
 	trace.BuildId = &secondLineWords[0]
 
-	if len(section) < 3 {
+	if len(sectionLines) < 3 {
 		return newSectionError("missing third line", nil)
 	}
-	thirdLineWords := words(section[2])
+	thirdLineWords := words(sectionLines[2])
 	if len(thirdLineWords) < 1 {
 		return newSectionError("missing node id", nil)
 	} else if len(thirdLineWords) < 2 {
@@ -173,11 +173,11 @@ func parseSectionIntro(section []string, trace *Trace) error {
 		trace.TraceCreationTimestamp = &traceCreationTimestamp
 	}
 
-	if len(section) < 4 {
-		// Missing PCAP statistics is ok, for compatibility.
+	if len(sectionLines) < 4 {
+		// Missing PCAP statistics is ok, for backwards compatibility.
 		return nil
 	}
-	fourthLineWords := words(section[3])
+	fourthLineWords := words(sectionLines[3])
 	if len(fourthLineWords) < 1 {
 		return newSectionError("missing PCAP received", nil)
 	} else if len(fourthLineWords) < 2 {
