@@ -49,6 +49,7 @@ func (section Section) String() string {
 
 type TraceParseError struct {
 	Section  Section
+	LineNumber int
 	Suberror error
 }
 
@@ -56,12 +57,16 @@ func (err *TraceParseError) Error() string {
 	return fmt.Sprintf("Section %s %s", err.Section, err.Suberror)
 }
 
-func newTraceParseError(section Section, suberror error) error {
-	return &TraceParseError{section, suberror}
+func newTraceParseError(section Section, lineNumber int, suberror error) error {
+	return &TraceParseError{
+		Section: section,
+		LineNumber: lineNumber,
+		Suberror: suberror}
 }
 
 type sectionError struct {
 	Message  string
+	LineNumber int
 	Suberror error
 	Example  *string
 }
@@ -76,31 +81,34 @@ func (err *sectionError) Error() string {
 	return fmt.Sprintf("%s (\"%s\"): %s", err.Message, err.Example, err.Suberror)
 }
 
-func newSectionConversionError(message string, example string, suberror error) error {
+func newSectionConversionError(message string, lineNumber int, example string, suberror error) error {
 	return &sectionError{
 		Message:  message,
+		LineNumber: lineNumber,
 		Suberror: suberror,
 		Example:  &example,
 	}
 }
 
-func newSectionErrorWithSuberror(message string, suberror error) error {
+func newSectionErrorWithSuberror(message string, lineNumber int, suberror error) error {
 	return &sectionError{
 		Message:  message,
+		LineNumber: lineNumber,
 		Suberror: suberror,
 	}
 }
 
-func newSectionError(message string) error {
-	return newSectionErrorWithSuberror(message, nil)
+func newSectionError(message string, lineNumber int) error {
+	return newSectionErrorWithSuberror(message, lineNumber, nil)
 }
 
-func linesToSections(lines [][]byte) [][]string {
-	sections := [][]string{}
+func linesToSections(lines [][]byte) (sections [][]string, lineNumbers []int) {
 	currentSection := []string{}
-	for _, line := range lines {
+	lineNumbers = append(lineNumbers, 0)
+	for lineNumber, line := range lines {
 		if len(line) == 0 {
 			sections = append(sections, currentSection)
+			lineNumbers = append(lineNumbers, lineNumber + 1)
 			currentSection = []string{}
 		} else {
 			currentSection = append(currentSection, string(line))
@@ -109,7 +117,7 @@ func linesToSections(lines [][]byte) [][]string {
 	if len(currentSection) > 0 {
 		sections = append(sections, currentSection)
 	}
-	return sections
+	return
 }
 
 func atoi32(s string) (int32, error) {
@@ -151,53 +159,52 @@ func words(str string) []string {
 
 func parseSectionIntro(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
-		return newSectionError("missing first line")
+		return newSectionError("missing first line", 0)
 	}
 	firstLineWords := words(sectionLines[0])
 	if len(firstLineWords) < 1 {
-		return newSectionError("missing file format version")
+		return newSectionError("missing file format version", 0)
 	}
 	if fileFormatVersion, err := atoi32(firstLineWords[0]); err != nil {
-		return newSectionConversionError("has invalid file format version", firstLineWords[0], err)
+		return newSectionConversionError("has invalid file format version", 0, firstLineWords[0], err)
 	} else {
 		trace.FileFormatVersion = &fileFormatVersion
 	}
 
 	if len(sectionLines) < 2 {
-		return newSectionError("missing second line")
+		return newSectionError("missing second line", 1)
 	}
-	secondLineWords := words(sectionLines[1])
-	if len(secondLineWords) < 1 {
-		return newSectionError("missing build id")
+	if len(sectionLines[1]) == 0 {
+		return newSectionError("missing build id", 1)
 	}
-	trace.BuildId = &secondLineWords[0]
+	trace.BuildId = &sectionLines[1]
 
 	if len(sectionLines) < 3 {
-		return newSectionError("missing third line")
+		return newSectionError("missing third line", 2)
 	}
 	thirdLineWords := words(sectionLines[2])
 	if len(thirdLineWords) < 1 {
-		return newSectionError("missing node id")
+		return newSectionError("missing node id", 2)
 	} else if len(thirdLineWords) < 2 {
-		return newSectionError("missing process start time")
+		return newSectionError("missing process start time", 2)
 	} else if len(thirdLineWords) < 3 {
-		return newSectionError("missing sequence number")
+		return newSectionError("missing sequence number", 2)
 	} else if len(thirdLineWords) < 4 {
-		return newSectionError("missing trace creation timestamp")
+		return newSectionError("missing trace creation timestamp", 2)
 	}
 	trace.NodeId = &thirdLineWords[0]
 	if processStartTimeMicroseconds, err := atoi64(thirdLineWords[1]); err != nil {
-		return newSectionConversionError("has invalid process start time", thirdLineWords[1], err)
+		return newSectionConversionError("has invalid process start time", 2, thirdLineWords[1], err)
 	} else {
 		trace.ProcessStartTimeMicroseconds = &processStartTimeMicroseconds
 	}
 	if sequenceNumber, err := atoi32(thirdLineWords[2]); err != nil {
-		return newSectionConversionError("has invalid sequence number", thirdLineWords[2], err)
+		return newSectionConversionError("has invalid sequence number", 2, thirdLineWords[2], err)
 	} else {
 		trace.SequenceNumber = &sequenceNumber
 	}
 	if traceCreationTimestamp, err := atoi64(thirdLineWords[3]); err != nil {
-		return newSectionConversionError("has invalid trace creation timestamp", thirdLineWords[3], err)
+		return newSectionConversionError("has invalid trace creation timestamp", 2, thirdLineWords[3], err)
 	} else {
 		trace.TraceCreationTimestamp = &traceCreationTimestamp
 	}
@@ -208,24 +215,24 @@ func parseSectionIntro(sectionLines []string, trace *Trace) error {
 	}
 	fourthLineWords := words(sectionLines[3])
 	if len(fourthLineWords) < 1 {
-		return newSectionError("missing PCAP received")
+		return newSectionError("missing PCAP received", 3)
 	} else if len(fourthLineWords) < 2 {
-		return newSectionError("missing PCAP dropped")
+		return newSectionError("missing PCAP dropped", 3)
 	} else if len(fourthLineWords) < 3 {
-		return newSectionError("missing interface dropped")
+		return newSectionError("missing interface dropped", 3)
 	}
 	if pcapReceived, err := atou32(fourthLineWords[0]); err != nil {
-		return newSectionConversionError("invalid PCAP received", fourthLineWords[0], err)
+		return newSectionConversionError("invalid PCAP received", 3, fourthLineWords[0], err)
 	} else {
 		trace.PcapReceived = &pcapReceived
 	}
 	if pcapDropped, err := atou32(fourthLineWords[1]); err != nil {
-		return newSectionConversionError("invalid PCAP dropped", fourthLineWords[1], err)
+		return newSectionConversionError("invalid PCAP dropped", 3, fourthLineWords[1], err)
 	} else {
 		trace.PcapDropped = &pcapDropped
 	}
 	if interfaceDropped, err := atou32(fourthLineWords[2]); err != nil {
-		return newSectionConversionError("invalid interface dropped", fourthLineWords[2], err)
+		return newSectionConversionError("invalid interface dropped", 3, fourthLineWords[2], err)
 	} else {
 		trace.InterfaceDropped = &interfaceDropped
 	}
@@ -240,7 +247,7 @@ func parseSectionWhitelist(sectionLines []string, trace *Trace) error {
 
 func parseSectionAnonymization(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
-		return newSectionError("missing anonymization signature section")
+		return newSectionError("missing anonymization signature section", 0)
 	}
 	if sectionLines[0] != "UNANONYMIZED" {
 		trace.AnonymizationSignature = &sectionLines[0]
@@ -250,20 +257,20 @@ func parseSectionAnonymization(sectionLines []string, trace *Trace) error {
 
 func parseSectionPacketSeries(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
-		return newSectionError("missing first line")
+		return newSectionError("missing first line", 0)
 	}
 	firstLineWords := words(sectionLines[0])
 	if len(firstLineWords) < 1 {
-		return newSectionError("missing base timestamp")
+		return newSectionError("missing base timestamp", 0)
 	} else if len(firstLineWords) < 2 {
-		return newSectionError("missing dropped packets count")
+		return newSectionError("missing dropped packets count", 0)
 	}
 	currentTimestampMicroseconds, err := atoi64(firstLineWords[0])
 	if err != nil {
-		return newSectionConversionError("invalid base timestamp", firstLineWords[0], err)
+		return newSectionConversionError("invalid base timestamp", 0, firstLineWords[0], err)
 	}
 	if dropped, err := atou32(firstLineWords[1]); err != nil {
-		return newSectionConversionError("invalid dropped packet count", firstLineWords[1], err)
+		return newSectionConversionError("invalid dropped packet count", 0, firstLineWords[1], err)
 	} else {
 		trace.PacketSeriesDropped = &dropped
 	}
@@ -272,25 +279,25 @@ func parseSectionPacketSeries(sectionLines []string, trace *Trace) error {
 	for index, line := range sectionLines[1:] {
 		entryWords := words(line)
 		if len(entryWords) < 1 {
-			return newSectionError("missing offset in packet entry")
+			return newSectionError("missing offset in packet entry", 1 + index)
 		} else if len(entryWords) < 2 {
-			return newSectionError("missing size in packet entry")
+			return newSectionError("missing size in packet entry", 1 + index)
 		} else if len(entryWords) < 3 {
-			return newSectionError("missing flow id in packet entry")
+			return newSectionError("missing flow id in packet entry", 1 + index)
 		}
 		if offset, err := atoi32(entryWords[0]); err != nil {
-			return newSectionConversionError("invalid offset in packet entry", entryWords[0], err)
+			return newSectionConversionError("invalid offset in packet entry", 1 + index, entryWords[0], err)
 		} else {
 			currentTimestampMicroseconds += int64(offset)
 		}
 		timestampMicroseconds := currentTimestampMicroseconds
 		size, err := atoi32(entryWords[1])
 		if err != nil {
-			return newSectionConversionError("invalid size in packet entry", entryWords[1], err)
+			return newSectionConversionError("invalid size in packet entry", 1 + index, entryWords[1], err)
 		}
 		flowId, err := atoi32(entryWords[2])
 		if err != nil {
-			return newSectionConversionError("invalid flow id in packet entry", entryWords[2], err)
+			return newSectionConversionError("invalid flow id in packet entry", 1 + index, entryWords[2], err)
 		}
 		newEntry := PacketSeriesEntry{
 			TimestampMicroseconds: &timestampMicroseconds,
@@ -304,35 +311,35 @@ func parseSectionPacketSeries(sectionLines []string, trace *Trace) error {
 
 func parseSectionFlowTable(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
-		return newSectionError("missing first line")
+		return newSectionError("missing first line", 0)
 	}
 	firstLineWords := words(sectionLines[0])
 	if len(firstLineWords) < 1 {
-		return newSectionError("missing base timestamp")
+		return newSectionError("missing base timestamp", 0)
 	} else if len(firstLineWords) < 2 {
-		return newSectionError("missing table size")
+		return newSectionError("missing table size", 0)
 	} else if len(firstLineWords) < 3 {
-		return newSectionError("missing expiration time")
+		return newSectionError("missing expiration time", 0)
 	} else if len(firstLineWords) < 4 {
-		return newSectionError("missing dropped entries count")
+		return newSectionError("missing dropped entries count", 0)
 	}
 	if baseline, err := atoi64(firstLineWords[0]); err != nil {
-		return newSectionConversionError("invalid base timestamp", firstLineWords[0], err)
+		return newSectionConversionError("invalid base timestamp", 0, firstLineWords[0], err)
 	} else {
 		trace.FlowTableBaseline = &baseline
 	}
 	if tableSize, err := atou32(firstLineWords[1]); err != nil {
-		return newSectionConversionError("invalid table size", firstLineWords[1], err)
+		return newSectionConversionError("invalid table size", 0, firstLineWords[1], err)
 	} else {
 		trace.FlowTableSize = &tableSize
 	}
 	if expired, err := atoi32(firstLineWords[2]); err != nil {
-		return newSectionConversionError("invalid expired count", firstLineWords[2], err)
+		return newSectionConversionError("invalid expired count", 0, firstLineWords[2], err)
 	} else {
 		trace.FlowTableExpired = &expired
 	}
 	if dropped, err := atoi32(firstLineWords[3]); err != nil {
-		return newSectionConversionError("invalid dropped count", firstLineWords[3], err)
+		return newSectionConversionError("invalid dropped count", 0, firstLineWords[3], err)
 	} else {
 		trace.FlowTableDropped = &dropped
 	}
@@ -341,52 +348,52 @@ func parseSectionFlowTable(sectionLines []string, trace *Trace) error {
 	for index, line := range sectionLines[1:] {
 		entryWords := words(line)
 		if len(entryWords) < 1 {
-			return newSectionError("missing flow id from flow table entry")
+			return newSectionError("missing flow id from flow table entry", 1 + index)
 		} else if len(entryWords) < 2 {
-			return newSectionError("missing source IP anonymized from flow table entry")
+			return newSectionError("missing source IP anonymized from flow table entry", 1 + index)
 		} else if len(entryWords) < 3 {
-			return newSectionError("missing source IP from flow table entry")
+			return newSectionError("missing source IP from flow table entry", 1 + index)
 		} else if len(entryWords) < 4 {
-			return newSectionError("missing destination IP anonymized from flow table entry")
+			return newSectionError("missing destination IP anonymized from flow table entry", 1 + index)
 		} else if len(entryWords) < 5 {
-			return newSectionError("missing destination IP from flow table entry")
+			return newSectionError("missing destination IP from flow table entry", 1 + index)
 		} else if len(entryWords) < 6 {
-			return newSectionError("missing transport protocol from flow table entry")
+			return newSectionError("missing transport protocol from flow table entry", 1 + index)
 		} else if len(entryWords) < 7 {
-			return newSectionError("missing source port from flow table entry")
+			return newSectionError("missing source port from flow table entry", 1 + index)
 		} else if len(entryWords) < 8 {
-			return newSectionError("missing destination port from flow table entry")
+			return newSectionError("missing destination port from flow table entry", 1 + index)
 		}
 		newEntry := FlowTableEntry{}
 		if flowId, err := atoi32(entryWords[0]); err != nil {
-			return newSectionConversionError("invalid flow id in flow table entry", entryWords[0], err)
+			return newSectionConversionError("invalid flow id in flow table entry", 1 + index, entryWords[0], err)
 		} else {
 			newEntry.FlowId = &flowId
 		}
 		if sourceIpAnonymized, err := stringIntToBool(entryWords[1]); err != nil {
-			return newSectionConversionError("invalid source IP anonymized", entryWords[1], err)
+			return newSectionConversionError("invalid source IP anonymized", 1 + index, entryWords[1], err)
 		} else {
 			newEntry.SourceIpAnonymized = &sourceIpAnonymized
 		}
 		newEntry.SourceIp = &entryWords[2]
 		if destinationIpAnonymized, err := stringIntToBool(entryWords[3]); err != nil {
-			return newSectionConversionError("invalid destination IP anonymized", entryWords[3], err)
+			return newSectionConversionError("invalid destination IP anonymized", 1 + index, entryWords[3], err)
 		} else {
 			newEntry.DestinationIpAnonymized = &destinationIpAnonymized
 		}
 		newEntry.DestinationIp = &entryWords[4]
 		if transportProtocol, err := atoi32(entryWords[5]); err != nil {
-			return newSectionConversionError("invalid transport protocol", entryWords[5], err)
+			return newSectionConversionError("invalid transport protocol", 1 + index, entryWords[5], err)
 		} else {
 			newEntry.TransportProtocol = &transportProtocol
 		}
 		if sourcePort, err := atoi32(entryWords[6]); err != nil {
-			return newSectionConversionError("invalid source port", entryWords[6], err)
+			return newSectionConversionError("invalid source port", 1 + index, entryWords[6], err)
 		} else {
 			newEntry.SourcePort = &sourcePort
 		}
 		if destinationPort, err := atoi32(entryWords[7]); err != nil {
-			return newSectionConversionError("invalid destination port", entryWords[7], err)
+			return newSectionConversionError("invalid destination port", 1 + index, entryWords[7], err)
 		} else {
 			newEntry.DestinationPort = &destinationPort
 		}
@@ -397,21 +404,21 @@ func parseSectionFlowTable(sectionLines []string, trace *Trace) error {
 
 func parseSectionDnsTableA(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
-		return newSectionError("missing first line")
+		return newSectionError("missing first line", 0)
 	}
 	firstLineWords := words(sectionLines[0])
 	if len(firstLineWords) < 1 {
-		return newSectionError("missing dropped DNS A records")
+		return newSectionError("missing dropped DNS A records", 0)
 	} else if len(firstLineWords) < 2 {
-		return newSectionError("missing dropped DNS CNAME records")
+		return newSectionError("missing dropped DNS CNAME records", 0)
 	}
 	if droppedA, err := atoi32(firstLineWords[0]); err != nil {
-		return newSectionConversionError("invalid dropped A records count", firstLineWords[0], err)
+		return newSectionConversionError("invalid dropped A records count", 0, firstLineWords[0], err)
 	} else {
 		trace.ARecordsDropped = &droppedA
 	}
 	if droppedCname, err := atoi32(firstLineWords[1]); err != nil {
-		return newSectionConversionError("invalid dropped CNAME records count", firstLineWords[1], err)
+		return newSectionConversionError("invalid dropped CNAME records count", 0, firstLineWords[1], err)
 	} else {
 		trace.CnameRecordsDropped = &droppedCname
 	}
@@ -420,38 +427,38 @@ func parseSectionDnsTableA(sectionLines []string, trace *Trace) error {
 	for index, line := range sectionLines[1:] {
 		entryWords := words(line)
 		if len(entryWords) < 1 {
-			return newSectionError("missing packet id in record")
+			return newSectionError("missing packet id in record", 1 + index)
 		} else if len(entryWords) < 2 {
-			return newSectionError("missing address id in record")
+			return newSectionError("missing address id in record", 1 + index)
 		} else if len(entryWords) < 3 {
-			return newSectionError("missing anonymized in record")
+			return newSectionError("missing anonymized in record", 1 + index)
 		} else if len(entryWords) < 4 {
-			return newSectionError("missing domain in record")
+			return newSectionError("missing domain in record", 1 + index)
 		} else if len(entryWords) < 5 {
-			return newSectionError("missing IP address in record")
+			return newSectionError("missing IP address in record", 1 + index)
 		} else if len(entryWords) < 6 {
-			return newSectionError("missing TTL id in record")
+			return newSectionError("missing TTL id in record", 1 + index)
 		}
 		newEntry := DnsARecord{}
 		if packetId, err := atoi32(entryWords[0]); err != nil {
-			return newSectionConversionError("invalid packet id in record", entryWords[0], err)
+			return newSectionConversionError("invalid packet id in record", 1 + index, entryWords[0], err)
 		} else {
 			newEntry.PacketId = &packetId
 		}
 		if addressId, err := atoi32(entryWords[1]); err != nil {
-			return newSectionConversionError("invalid address id in record", entryWords[1], err)
+			return newSectionConversionError("invalid address id in record", 1 + index, entryWords[1], err)
 		} else {
 			newEntry.AddressId = &addressId
 		}
 		if anonymized, err := stringIntToBool(entryWords[2]); err != nil {
-			return newSectionConversionError("invalid anonymized in record", entryWords[2], err)
+			return newSectionConversionError("invalid anonymized in record", 1 + index, entryWords[2], err)
 		} else {
 			newEntry.Anonymized = &anonymized
 		}
 		newEntry.Domain = &entryWords[3]
 		newEntry.IpAddress = &entryWords[4]
 		if ttl, err := atoi32(entryWords[5]); err != nil {
-			return newSectionConversionError("invalid TTL in record", entryWords[5], err)
+			return newSectionConversionError("invalid TTL in record", 1 + index, entryWords[5], err)
 		} else {
 			newEntry.Ttl = &ttl
 		}
@@ -465,45 +472,45 @@ func parseSectionDnsTableCname(sectionLines []string, trace *Trace) error {
 	for index, line := range sectionLines {
 		entryWords := words(line)
 		if len(entryWords) < 1 {
-			return newSectionError("missing packet id in record")
+			return newSectionError("missing packet id in record", index)
 		} else if len(entryWords) < 2 {
-			return newSectionError("missing address id in record")
+			return newSectionError("missing address id in record", index)
 		} else if len(entryWords) < 3 {
-			return newSectionError("missing domain anonymized in record")
+			return newSectionError("missing domain anonymized in record", index)
 		} else if len(entryWords) < 4 {
-			return newSectionError("missing domain in record")
+			return newSectionError("missing domain in record", index)
 		} else if len(entryWords) < 5 {
-			return newSectionError("missing CNAME anonymized in record")
+			return newSectionError("missing CNAME anonymized in record", index)
 		} else if len(entryWords) < 6 {
-			return newSectionError("missing CNAME in record")
+			return newSectionError("missing CNAME in record", index)
 		} else if len(entryWords) < 7 {
-			return newSectionError("missing TTL id in record")
+			return newSectionError("missing TTL id in record", index)
 		}
 		newEntry := DnsCnameRecord{}
 		if packetId, err := atoi32(entryWords[0]); err != nil {
-			return newSectionConversionError("invalid packet id in record", entryWords[0], err)
+			return newSectionConversionError("invalid packet id in record", index, entryWords[0], err)
 		} else {
 			newEntry.PacketId = &packetId
 		}
 		if addressId, err := atoi32(entryWords[1]); err != nil {
-			return newSectionConversionError("invalid address id in record", entryWords[1], err)
+			return newSectionConversionError("invalid address id in record", index, entryWords[1], err)
 		} else {
 			newEntry.AddressId = &addressId
 		}
 		if domainAnonymized, err := stringIntToBool(entryWords[2]); err != nil {
-			return newSectionConversionError("invalid domain anonymized in record", entryWords[2], err)
+			return newSectionConversionError("invalid domain anonymized in record", index, entryWords[2], err)
 		} else {
 			newEntry.DomainAnonymized = &domainAnonymized
 		}
 		newEntry.Domain = &entryWords[3]
 		if cnameAnonymized, err := stringIntToBool(entryWords[4]); err != nil {
-			return newSectionConversionError("invalid CNAME anonymized in record", entryWords[4], err)
+			return newSectionConversionError("invalid CNAME anonymized in record", index, entryWords[4], err)
 		} else {
 			newEntry.CnameAnonymized = &cnameAnonymized
 		}
 		newEntry.Cname = &entryWords[5]
 		if ttl, err := atoi32(entryWords[6]); err != nil {
-			return newSectionConversionError("invalid TTL in record", entryWords[6], err)
+			return newSectionConversionError("invalid TTL in record", index, entryWords[6], err)
 		} else {
 			newEntry.Ttl = &ttl
 		}
@@ -514,21 +521,21 @@ func parseSectionDnsTableCname(sectionLines []string, trace *Trace) error {
 
 func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
-		return newSectionError("missing first line")
+		return newSectionError("missing first line", 0)
 	}
 	firstLineWords := words(sectionLines[0])
 	if len(firstLineWords) < 1 {
-		return newSectionError("missing first id")
+		return newSectionError("missing first id", 0)
 	} else if len(firstLineWords) < 2 {
-		return newSectionError("missing table size")
+		return newSectionError("missing table size", 0)
 	}
 	if firstId, err := atoi32(firstLineWords[0]); err != nil {
-		return newSectionConversionError("invalid first id", firstLineWords[0], err)
+		return newSectionConversionError("invalid first id", 0, firstLineWords[0], err)
 	} else {
 		trace.AddressTableFirstId = &firstId
 	}
 	if size, err := atoi32(firstLineWords[1]); err != nil {
-		return newSectionConversionError("invalid table size", firstLineWords[1], err)
+		return newSectionConversionError("invalid table size", 0, firstLineWords[1], err)
 	} else {
 		trace.AddressTableSize = &size
 	}
@@ -537,9 +544,9 @@ func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 	for index, line := range sectionLines[1:] {
 		entryWords := words(line)
 		if len(entryWords) < 1 {
-			return newSectionError("missing MAC address in entry")
+			return newSectionError("missing MAC address in entry", 1 + index)
 		} else if len(entryWords) < 2 {
-			return newSectionError("missing IP address in entry")
+			return newSectionError("missing IP address in entry", 1 + index)
 		}
 		trace.AddressTableEntry[index] = &AddressTableEntry{
 			MacAddress: &entryWords[0],
@@ -554,18 +561,18 @@ func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
 	for index, line := range sectionLines {
 		entryWords := words(line)
 		if len(entryWords) < 1 {
-			return newSectionError("missing size in entry")
+			return newSectionError("missing size in entry", index)
 		} else if len(entryWords) < 2 {
-			return newSectionError("missing drop count in entry")
+			return newSectionError("missing drop count in entry", index)
 		}
 		newEntry := DroppedPacketsEntry{}
 		if size, err := atou32(entryWords[0]); err != nil {
-			return newSectionConversionError("invalid size in entry", entryWords[0], err)
+			return newSectionConversionError("invalid size in entry", index, entryWords[0], err)
 		} else {
 			newEntry.Size = &size
 		}
 		if count, err := atou32(entryWords[1]); err != nil {
-			return newSectionConversionError("invalid count in entry", entryWords[1], err)
+			return newSectionConversionError("invalid count in entry", index, entryWords[1], err)
 		} else {
 			newEntry.Count = &count
 		}
@@ -574,7 +581,7 @@ func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
-func makeTraceFromSections(sections [][]string) (*Trace, error) {
+func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, error) {
 	type sectionParser func([]string, *Trace) error
 
 	trace := new(Trace)
@@ -591,10 +598,14 @@ func makeTraceFromSections(sections [][]string) (*Trace, error) {
 	}
 	for section, parse := range mandatorySectionsMap {
 		if len(sections) <= int(section) {
-			return nil, newTraceParseError(section, newSectionError("missing"))
+			return nil, newTraceParseError(section, 0, newSectionError("missing", 0))
 		}
 		if err := parse(sections[int(section)], trace); err != nil {
-			return nil, newTraceParseError(section, err)
+			if e, ok := err.(*sectionError); ok {
+				return nil, newTraceParseError(section, lineNumbers[int(section)] + e.LineNumber - 1, err)
+			} else {
+				return nil, newTraceParseError(section, lineNumbers[int(section)], err)
+			}
 		}
 	}
 
@@ -606,7 +617,11 @@ func makeTraceFromSections(sections [][]string) (*Trace, error) {
 			continue
 		}
 		if err := parse(sections[int(section)], trace); err != nil {
-			return nil, newTraceParseError(section, err)
+			if e, ok := err.(*sectionError); ok {
+				return nil, newTraceParseError(section, lineNumbers[int(section)] + e.LineNumber - 1, err)
+			} else {
+				return nil, newTraceParseError(section, lineNumbers[int(section)], err)
+			}
 		}
 	}
 
@@ -619,8 +634,8 @@ func ParseTrace(source io.Reader) (*Trace, error) {
 		return nil, err
 	}
 	lines := bytes.Split(contents, []byte{'\n'})
-	sections := linesToSections(lines)
-	trace, err := makeTraceFromSections(sections)
+	sections, lineNumbers := linesToSections(lines)
+	trace, err := makeTraceFromSections(sections, lineNumbers)
 	if err != nil {
 		return nil, err
 	}

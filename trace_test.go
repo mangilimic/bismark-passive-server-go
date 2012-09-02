@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func printSections(sections [][]string) {
+func printSections(sections [][]string, lineNumbers []int) {
 	fmt.Println("{")
-	for _, section := range sections {
+	for i, section := range sections {
 		fmt.Println(" {")
-		for _, line := range section {
-			fmt.Printf("  %s\n", line)
+		for j, line := range section {
+			fmt.Printf("  %d: %s\n", lineNumbers[i] + j + 1, line)
 		}
 		fmt.Println(" }")
 	}
@@ -30,11 +30,11 @@ func ExampleLinesToSections_simple() {
 	// Output:
 	// {
 	//  {
-	//   hello
-	//   world
+	//   1: hello
+	//   2: world
 	//  }
 	//  {
-	//   test
+	//   4: test
 	//  }
 	// }
 }
@@ -45,20 +45,33 @@ func ExampleLinesToSections_empty() {
 		[]byte("world"),
 		[]byte(""),
 		[]byte(""),
-		[]byte("test"),
+		[]byte("test1"),
+		[]byte("test2"),
+		[]byte("test3"),
+		[]byte("test4"),
+		[]byte(""),
+		[]byte("again1"),
+		[]byte("again2"),
 	}
 	printSections(linesToSections(lines))
 
 	// Output:
 	// {
 	//  {
-	//   hello
-	//   world
+	//   1: hello
+	//   2: world
 	//  }
 	//  {
 	//  }
 	//  {
-	//   test
+	//   5: test1
+	//   6: test2
+	//   7: test3
+	//   8: test4
+	//  }
+	//  {
+	//   10: again1
+	//   11: again2
 	//  }
 	// }
 }
@@ -74,20 +87,24 @@ func ExampleLinesToSections_trim() {
 	// Output:
 	// {
 	//  {
-	//   hello
-	//   world
+	//   1: hello
+	//   2: world
 	//  }
 	// }
 }
 
-func checkForSectionError(t *testing.T, parseSection func([]string, *Trace) error, lines []string) {
+func checkForSectionError(t *testing.T, parseSection func([]string, *Trace) error, lines []string, lineNumber int) {
 	trace := Trace{}
 	err := parseSection(lines, &trace)
 	if err == nil {
 		t.Fatalf("Trace should be invalid. Instead got trace: %s", trace)
 	}
-	if e, ok := err.(*sectionError); !ok {
+	e, ok := err.(*sectionError)
+	if !ok {
 		t.Fatalf("Should return sectionError. Instead got error: %s", e)
+	}
+	if e.LineNumber + 1 != lineNumber {
+		t.Fatalf("Expected error on line number %d. Got line %d instead", lineNumber, e.LineNumber + 1)
 	}
 }
 
@@ -95,31 +112,6 @@ func checkProtosEqual(t *testing.T, expectedTrace *Trace, trace *Trace) {
 	if !proto.Equal(expectedTrace, trace) {
 		t.Fatalf("Protocol buffers not equal:\nExpected: %s\nActual:   %s", expectedTrace, trace)
 	}
-}
-
-func TestParseSectionIntro_Invalid(t *testing.T) {
-	// Incompleteness
-	checkForSectionError(t, parseSectionIntro, []string{})
-	checkForSectionError(t, parseSectionIntro, []string{""})
-	checkForSectionError(t, parseSectionIntro, []string{"10"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", ""})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", ""})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", ""})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76 85"})
-
-	// Integer conversion
-	checkForSectionError(t, parseSectionIntro, []string{"STR", "BUILDID", "NODEID 123 321 789", "76 85 99"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID STR 321 789", "76 85 99"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 STR 789", "76 85 99"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 STR", "76 85 99"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "STR 85 99"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76 STR 99"})
-	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76 85 STR"})
 }
 
 func TestParseSectionIntro_Valid(t *testing.T) {
@@ -146,6 +138,31 @@ func TestParseSectionIntro_Valid(t *testing.T) {
 		InterfaceDropped:             proto.Uint32(34),
 	}
 	checkProtosEqual(t, &expectedTrace, &trace)
+}
+
+func TestParseSectionIntro_Invalid(t *testing.T) {
+	// Incompleteness
+	checkForSectionError(t, parseSectionIntro, []string{}, 1)
+	checkForSectionError(t, parseSectionIntro, []string{""}, 1)
+	checkForSectionError(t, parseSectionIntro, []string{"10"}, 2)
+	checkForSectionError(t, parseSectionIntro, []string{"10", ""}, 2)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID"}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", ""}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID"}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123"}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321"}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", ""}, 4)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76"}, 4)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76 85"}, 4)
+
+	// Integer conversion
+	checkForSectionError(t, parseSectionIntro, []string{"STR", "BUILDID", "NODEID 123 321 789", "76 85 99"}, 1)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID STR 321 789", "76 85 99"}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 STR 789", "76 85 99"}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 STR", "76 85 99"}, 3)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "STR 85 99"}, 4)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76 STR 99"}, 4)
+	checkForSectionError(t, parseSectionIntro, []string{"10", "BUILDID", "NODEID 123 321 789", "76 85 STR"}, 4)
 }
 
 func TestParseSectionIntro_ValidOptional(t *testing.T) {
@@ -277,14 +294,14 @@ func TestParseSectionPacketSeries_Valid(t *testing.T) {
 }
 
 func TestParseSectionPacketSeries_Invalid(t *testing.T) {
-	checkForSectionError(t, parseSectionPacketSeries, []string{})
-	checkForSectionError(t, parseSectionPacketSeries, []string{""})
-	checkForSectionError(t, parseSectionPacketSeries, []string{"10"})
-	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0"})
-	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10"})
-	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10 23", ""})
-	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10 23", "20"})
-	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10 23", "20 12"})
+	checkForSectionError(t, parseSectionPacketSeries, []string{}, 1)
+	checkForSectionError(t, parseSectionPacketSeries, []string{""}, 1)
+	checkForSectionError(t, parseSectionPacketSeries, []string{"10"}, 1)
+	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0"}, 2)
+	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10"}, 2)
+	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10 23", ""}, 3)
+	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10 23", "20"}, 3)
+	checkForSectionError(t, parseSectionPacketSeries, []string{"10 11", "0 10 23", "20 12"}, 3)
 }
 
 func TestParseSectionFlowTable_Valid(t *testing.T) {
@@ -352,31 +369,31 @@ func TestParseSectionFlowTable_Valid(t *testing.T) {
 }
 
 func TestParseSectionFlowTable_Invalid(t *testing.T) {
-	checkForSectionError(t, parseSectionFlowTable, []string{})
-	checkForSectionError(t, parseSectionFlowTable, []string{""})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", ""})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 16"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 16 17", ""})
+	checkForSectionError(t, parseSectionFlowTable, []string{}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{""}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10"}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11"}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12"}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", ""}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 16"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 16 17", ""}, 3)
 
-	checkForSectionError(t, parseSectionFlowTable, []string{"XX 11 12 13", "14 0 IP1 0 IP2 15 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 XX 12 13", "14 0 IP1 0 IP2 15 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 XX 13", "14 0 IP1 0 IP2 15 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 XX", "14 0 IP1 0 IP2 15 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "XX 0 IP1 0 IP2 15 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 X IP1 0 IP2 15 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 X IP2 15 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 XX 16 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 XX 17"})
-	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 16 XX"})
+	checkForSectionError(t, parseSectionFlowTable, []string{"XX 11 12 13", "14 0 IP1 0 IP2 15 16 17"}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 XX 12 13", "14 0 IP1 0 IP2 15 16 17"}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 XX 13", "14 0 IP1 0 IP2 15 16 17"}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 XX", "14 0 IP1 0 IP2 15 16 17"}, 1)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "XX 0 IP1 0 IP2 15 16 17"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 X IP1 0 IP2 15 16 17"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 X IP2 15 16 17"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 XX 16 17"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 XX 17"}, 2)
+	checkForSectionError(t, parseSectionFlowTable, []string{"10 11 12 13", "14 0 IP1 0 IP2 15 16 XX"}, 2)
 }
 
 func TestParseSectionDnsTableA_Valid(t *testing.T) {
@@ -416,24 +433,24 @@ func TestParseSectionDnsTableA_Valid(t *testing.T) {
 }
 
 func TestParseSectionDnsTableA_Invalid(t *testing.T) {
-	checkForSectionError(t, parseSectionDnsTableA, []string{})
-	checkForSectionError(t, parseSectionDnsTableA, []string{""})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", ""})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1 IP1"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1 IP1 14", ""})
+	checkForSectionError(t, parseSectionDnsTableA, []string{}, 1)
+	checkForSectionError(t, parseSectionDnsTableA, []string{""}, 1)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10"}, 1)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", ""}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1 IP1"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1 IP1 14", ""}, 3)
 
-	checkForSectionError(t, parseSectionDnsTableA, []string{"XX 11", "12 13 0 DOM1 IP1 14"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 XX", "12 13 0 DOM1 IP1 14"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "XX 13 0 DOM1 IP1 14"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 XX 0 DOM1 IP1 14"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 X DOM1 IP1 14"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 2 DOM1 IP1 14"})
-	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1 IP1 XX"})
+	checkForSectionError(t, parseSectionDnsTableA, []string{"XX 11", "12 13 0 DOM1 IP1 14"}, 1)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 XX", "12 13 0 DOM1 IP1 14"}, 1)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "XX 13 0 DOM1 IP1 14"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 XX 0 DOM1 IP1 14"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 X DOM1 IP1 14"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 2 DOM1 IP1 14"}, 2)
+	checkForSectionError(t, parseSectionDnsTableA, []string{"10 11", "12 13 0 DOM1 IP1 XX"}, 2)
 }
 
 func TestParseSectionDnsTableCname_Valid(t *testing.T) {
@@ -492,14 +509,13 @@ func TestParseSectionDnsTableCname_Valid(t *testing.T) {
 }
 
 func TestParseSectionDnsTableCname_Invalid(t *testing.T) {
-	checkForSectionError(t, parseSectionDnsTableCname, []string{""})
-	checkForSectionError(t, parseSectionDnsTableCname, []string{"12"})
-	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13"})
-	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0"})
-	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0 DOM1"})
-	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0 DOM1 CN1"})
-	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0 DOM1 CN1 14"})
-	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0 DOM1 CN1 14", ""})
+	checkForSectionError(t, parseSectionDnsTableCname, []string{""}, 1)
+	checkForSectionError(t, parseSectionDnsTableCname, []string{"12"}, 1)
+	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13"}, 1)
+	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0"}, 1)
+	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0 DOM1"}, 1)
+	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0 DOM1 0 CN1"}, 1)
+	checkForSectionError(t, parseSectionDnsTableCname, []string{"12 13 0 DOM1 0 CN1 14", ""}, 2)
 }
 
 func TestParseSectionAddressTable_Valid(t *testing.T) {
@@ -531,15 +547,15 @@ func TestParseSectionAddressTable_Valid(t *testing.T) {
 }
 
 func TestParseSectionAddressTable_Invalid(t *testing.T) {
-	checkForSectionError(t, parseSectionAddressTable, []string{})
-	checkForSectionError(t, parseSectionAddressTable, []string{""})
-	checkForSectionError(t, parseSectionAddressTable, []string{"10"})
-	checkForSectionError(t, parseSectionAddressTable, []string{"10 11", ""})
-	checkForSectionError(t, parseSectionAddressTable, []string{"10 11", "MAC1"})
-	checkForSectionError(t, parseSectionAddressTable, []string{"10 11", "MAC1 IP1", ""})
+	checkForSectionError(t, parseSectionAddressTable, []string{}, 1)
+	checkForSectionError(t, parseSectionAddressTable, []string{""}, 1)
+	checkForSectionError(t, parseSectionAddressTable, []string{"10"}, 1)
+	checkForSectionError(t, parseSectionAddressTable, []string{"10 11", ""}, 2)
+	checkForSectionError(t, parseSectionAddressTable, []string{"10 11", "MAC1"}, 2)
+	checkForSectionError(t, parseSectionAddressTable, []string{"10 11", "MAC1 IP1", ""}, 3)
 
-	checkForSectionError(t, parseSectionAddressTable, []string{"XX 11", "MAC1 IP1"})
-	checkForSectionError(t, parseSectionAddressTable, []string{"10 XX", "MAC1 IP1"})
+	checkForSectionError(t, parseSectionAddressTable, []string{"XX 11", "MAC1 IP1"}, 1)
+	checkForSectionError(t, parseSectionAddressTable, []string{"10 XX", "MAC1 IP1"}, 1)
 }
 
 func TestParseSectionDropStatistics_Valid(t *testing.T) {
@@ -568,7 +584,7 @@ func TestParseSectionDropStatistics_Valid(t *testing.T) {
 }
 
 func TestParseSectionDropStatistics_Invalid(t *testing.T) {
-	checkForSectionError(t, parseSectionDropStatistics, []string{""})
-	checkForSectionError(t, parseSectionDropStatistics, []string{"10"})
-	checkForSectionError(t, parseSectionDropStatistics, []string{"10 11", ""})
+	checkForSectionError(t, parseSectionDropStatistics, []string{""}, 1)
+	checkForSectionError(t, parseSectionDropStatistics, []string{"10"}, 1)
+	checkForSectionError(t, parseSectionDropStatistics, []string{"10 11", ""}, 2)
 }
