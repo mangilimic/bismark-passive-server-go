@@ -12,7 +12,7 @@ func printSections(sections [][]string, lineNumbers []int) {
 	for i, section := range sections {
 		fmt.Println(" {")
 		for j, line := range section {
-			fmt.Printf("  %d: %s\n", lineNumbers[i] + j + 1, line)
+			fmt.Printf("  %d: %s\n", lineNumbers[i]+j+1, line)
 		}
 		fmt.Println(" }")
 	}
@@ -104,8 +104,8 @@ func checkForSectionError(t *testing.T, parseSection func([]string, *Trace) erro
 	if !ok {
 		t.Fatalf("Should return sectionError. Instead got error: %s", e)
 	}
-	if e.LineNumber + 1 != lineNumber {
-		t.Fatalf("Expected error on line number %d. Got line %d instead", lineNumber, e.LineNumber + 1)
+	if e.LineNumber+1 != lineNumber {
+		t.Fatalf("Expected error on line number %d. Got line %d instead", lineNumber, e.LineNumber+1)
 	}
 }
 
@@ -592,7 +592,7 @@ func TestParseSectionDropStatistics_Invalid(t *testing.T) {
 
 func TestParseTrace(t *testing.T) {
 	fileContents :=
-`5
+		`5
 UNKNOWN
 OWC43DC78EE081 1346479358582428 0 1346479388
 138 0 0
@@ -639,14 +639,14 @@ c43dc79106a8 1336ec0318683863
 	}
 	expectedTrace := Trace{
 		FileFormatVersion: proto.Int32(5),
-		BuildId: proto.String("UNKNOWN"),
-		NodeId: proto.String("OWC43DC78EE081"),
+		BuildId:           proto.String("UNKNOWN"),
+		NodeId:            proto.String("OWC43DC78EE081"),
 		ProcessStartTimeMicroseconds: proto.Int64(1346479358582428),
-		SequenceNumber: proto.Int32(0),
-		TraceCreationTimestamp: proto.Int64(1346479388),
-		PcapReceived: proto.Uint32(138),
-		PcapDropped: proto.Uint32(0),
-		InterfaceDropped: proto.Uint32(0),
+		SequenceNumber:               proto.Int32(0),
+		TraceCreationTimestamp:       proto.Int64(1346479388),
+		PcapReceived:                 proto.Uint32(138),
+		PcapDropped:                  proto.Uint32(0),
+		InterfaceDropped:             proto.Uint32(0),
 		Whitelist: []string{
 			"google.com",
 			"facebook.com",
@@ -658,88 +658,88 @@ c43dc79106a8 1336ec0318683863
 			"twitter.com",
 		},
 		AnonymizationSignature: proto.String("88698fe15783cd75107714ef91761673c41a7d1f"),
-		PacketSeriesDropped: proto.Uint32(0),
+		PacketSeriesDropped:    proto.Uint32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359146721),
-				Size: proto.Int32(74),
-				FlowId: proto.Int32(31646),
+				Size:                  proto.Int32(74),
+				FlowId:                proto.Int32(31646),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359147219),
-				Size: proto.Int32(74),
-				FlowId: proto.Int32(25349),
+				Size:                  proto.Int32(74),
+				FlowId:                proto.Int32(25349),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359198044),
-				Size: proto.Int32(174),
-				FlowId: proto.Int32(34629),
+				Size:                  proto.Int32(174),
+				FlowId:                proto.Int32(34629),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359210367),
-				Size: proto.Int32(174),
-				FlowId: proto.Int32(36522),
+				Size:                  proto.Int32(174),
+				FlowId:                proto.Int32(36522),
 			},
 		},
 		FlowTableBaseline: proto.Int64(1346479359),
-		FlowTableSize: proto.Uint32(34),
-		FlowTableExpired: proto.Int32(0),
-		FlowTableDropped: proto.Int32(0),
+		FlowTableSize:     proto.Uint32(34),
+		FlowTableExpired:  proto.Int32(0),
+		FlowTableDropped:  proto.Int32(0),
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(829),
-				SourceIpAnonymized: proto.Bool(true),
-				SourceIp: proto.String("9ccddd49ad2336c5"),
+				FlowId:                  proto.Int32(829),
+				SourceIpAnonymized:      proto.Bool(true),
+				SourceIp:                proto.String("9ccddd49ad2336c5"),
 				DestinationIpAnonymized: proto.Bool(true),
-				DestinationIp: proto.String("ebd6aae385287e9f"),
-				TransportProtocol: proto.Int32(6),
-				SourcePort: proto.Int32(5228),
-				DestinationPort: proto.Int32(46716),
+				DestinationIp:           proto.String("ebd6aae385287e9f"),
+				TransportProtocol:       proto.Int32(6),
+				SourcePort:              proto.Int32(5228),
+				DestinationPort:         proto.Int32(46716),
 			},
 			&FlowTableEntry{
-				FlowId: proto.Int32(9382),
-				SourceIpAnonymized: proto.Bool(true),
-				SourceIp: proto.String("8f1b0f1764a0dd3e"),
+				FlowId:                  proto.Int32(9382),
+				SourceIpAnonymized:      proto.Bool(true),
+				SourceIp:                proto.String("8f1b0f1764a0dd3e"),
 				DestinationIpAnonymized: proto.Bool(true),
-				DestinationIp: proto.String("ebd6aae385287e9f"),
-				TransportProtocol: proto.Int32(6),
-				SourcePort: proto.Int32(993),
-				DestinationPort: proto.Int32(52519),
+				DestinationIp:           proto.String("ebd6aae385287e9f"),
+				TransportProtocol:       proto.Int32(6),
+				SourcePort:              proto.Int32(993),
+				DestinationPort:         proto.Int32(52519),
 			},
 		},
-		ARecordsDropped: proto.Int32(0),
+		ARecordsDropped:     proto.Int32(0),
 		CnameRecordsDropped: proto.Int32(0),
 		ARecord: []*DnsARecord{
 			&DnsARecord{
-				PacketId: proto.Int32(2),
-				AddressId: proto.Int32(0),
+				PacketId:   proto.Int32(2),
+				AddressId:  proto.Int32(0),
 				Anonymized: proto.Bool(false),
-				Domain: proto.String("www.l.google.com"),
-				IpAddress: proto.String("950a8fca863ac696"),
-				Ttl: proto.Int32(298),
+				Domain:     proto.String("www.l.google.com"),
+				IpAddress:  proto.String("950a8fca863ac696"),
+				Ttl:        proto.Int32(298),
 			},
 		},
 		CnameRecord: []*DnsCnameRecord{
 			&DnsCnameRecord{
-				PacketId: proto.Int32(2),
-				AddressId: proto.Int32(0),
+				PacketId:         proto.Int32(2),
+				AddressId:        proto.Int32(0),
 				DomainAnonymized: proto.Bool(false),
-				Domain: proto.String("www.google.com"),
-				CnameAnonymized: proto.Bool(false),
-				Cname: proto.String("www.l.google.com"),
-				Ttl: proto.Int32(43198),
+				Domain:           proto.String("www.google.com"),
+				CnameAnonymized:  proto.Bool(false),
+				Cname:            proto.String("www.l.google.com"),
+				Ttl:              proto.Int32(43198),
 			},
 		},
 		AddressTableFirstId: proto.Int32(0),
-		AddressTableSize: proto.Int32(256),
+		AddressTableSize:    proto.Int32(256),
 		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
 				MacAddress: proto.String("64a769ccb29d"),
-				IpAddress: proto.String("ebd6aae385287e9f"),
+				IpAddress:  proto.String("ebd6aae385287e9f"),
 			},
 			&AddressTableEntry{
 				MacAddress: proto.String("c43dc79106a8"),
-				IpAddress: proto.String("1336ec0318683863"),
+				IpAddress:  proto.String("1336ec0318683863"),
 			},
 		},
 	}
