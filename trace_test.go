@@ -3,6 +3,7 @@ package bismarkpassive
 import (
 	"code.google.com/p/goprotobuf/proto"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -587,4 +588,160 @@ func TestParseSectionDropStatistics_Invalid(t *testing.T) {
 	checkForSectionError(t, parseSectionDropStatistics, []string{""}, 1)
 	checkForSectionError(t, parseSectionDropStatistics, []string{"10"}, 1)
 	checkForSectionError(t, parseSectionDropStatistics, []string{"10 11", ""}, 2)
+}
+
+func TestParseTrace(t *testing.T) {
+	fileContents :=
+`5
+UNKNOWN
+OWC43DC78EE081 1346479358582428 0 1346479388
+138 0 0
+
+google.com
+facebook.com
+youtube.com
+yahoo.com
+amazon.com
+wikipedia.org
+ebay.com
+twitter.com
+
+88698fe15783cd75107714ef91761673c41a7d1f
+
+1346479359146721 0
+0 74 31646
+498 74 25349
+50825 174 34629
+12323 174 36522
+
+1346479359 34 0 0
+829 1 9ccddd49ad2336c5 1 ebd6aae385287e9f 6 5228 46716
+9382 1 8f1b0f1764a0dd3e 1 ebd6aae385287e9f 6 993 52519
+
+0 0
+2 0 0 www.l.google.com 950a8fca863ac696 298
+
+2 0 0 www.google.com 0 www.l.google.com 43198
+
+0 256
+64a769ccb29d ebd6aae385287e9f
+c43dc79106a8 1336ec0318683863
+
+
+`
+	reader := strings.NewReader(fileContents)
+	if reader == nil {
+		t.Fatal("Could not create reader")
+	}
+	trace, err := ParseTrace(reader)
+	if err != nil {
+		t.Fatalf("Failed to parse trace: %s", err)
+	}
+	expectedTrace := Trace{
+		FileFormatVersion: proto.Int32(5),
+		BuildId: proto.String("UNKNOWN"),
+		NodeId: proto.String("OWC43DC78EE081"),
+		ProcessStartTimeMicroseconds: proto.Int64(1346479358582428),
+		SequenceNumber: proto.Int32(0),
+		TraceCreationTimestamp: proto.Int64(1346479388),
+		PcapReceived: proto.Uint32(138),
+		PcapDropped: proto.Uint32(0),
+		InterfaceDropped: proto.Uint32(0),
+		Whitelist: []string{
+			"google.com",
+			"facebook.com",
+			"youtube.com",
+			"yahoo.com",
+			"amazon.com",
+			"wikipedia.org",
+			"ebay.com",
+			"twitter.com",
+		},
+		AnonymizationSignature: proto.String("88698fe15783cd75107714ef91761673c41a7d1f"),
+		PacketSeriesDropped: proto.Uint32(0),
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(1346479359146721),
+				Size: proto.Int32(74),
+				FlowId: proto.Int32(31646),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(1346479359147219),
+				Size: proto.Int32(74),
+				FlowId: proto.Int32(25349),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(1346479359198044),
+				Size: proto.Int32(174),
+				FlowId: proto.Int32(34629),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(1346479359210367),
+				Size: proto.Int32(174),
+				FlowId: proto.Int32(36522),
+			},
+		},
+		FlowTableBaseline: proto.Int64(1346479359),
+		FlowTableSize: proto.Uint32(34),
+		FlowTableExpired: proto.Int32(0),
+		FlowTableDropped: proto.Int32(0),
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId: proto.Int32(829),
+				SourceIpAnonymized: proto.Bool(true),
+				SourceIp: proto.String("9ccddd49ad2336c5"),
+				DestinationIpAnonymized: proto.Bool(true),
+				DestinationIp: proto.String("ebd6aae385287e9f"),
+				TransportProtocol: proto.Int32(6),
+				SourcePort: proto.Int32(5228),
+				DestinationPort: proto.Int32(46716),
+			},
+			&FlowTableEntry{
+				FlowId: proto.Int32(9382),
+				SourceIpAnonymized: proto.Bool(true),
+				SourceIp: proto.String("8f1b0f1764a0dd3e"),
+				DestinationIpAnonymized: proto.Bool(true),
+				DestinationIp: proto.String("ebd6aae385287e9f"),
+				TransportProtocol: proto.Int32(6),
+				SourcePort: proto.Int32(993),
+				DestinationPort: proto.Int32(52519),
+			},
+		},
+		ARecordsDropped: proto.Int32(0),
+		CnameRecordsDropped: proto.Int32(0),
+		ARecord: []*DnsARecord{
+			&DnsARecord{
+				PacketId: proto.Int32(2),
+				AddressId: proto.Int32(0),
+				Anonymized: proto.Bool(false),
+				Domain: proto.String("www.l.google.com"),
+				IpAddress: proto.String("950a8fca863ac696"),
+				Ttl: proto.Int32(298),
+			},
+		},
+		CnameRecord: []*DnsCnameRecord{
+			&DnsCnameRecord{
+				PacketId: proto.Int32(2),
+				AddressId: proto.Int32(0),
+				DomainAnonymized: proto.Bool(false),
+				Domain: proto.String("www.google.com"),
+				CnameAnonymized: proto.Bool(false),
+				Cname: proto.String("www.l.google.com"),
+				Ttl: proto.Int32(43198),
+			},
+		},
+		AddressTableFirstId: proto.Int32(0),
+		AddressTableSize: proto.Int32(256),
+		AddressTableEntry: []*AddressTableEntry{
+			&AddressTableEntry{
+				MacAddress: proto.String("64a769ccb29d"),
+				IpAddress: proto.String("ebd6aae385287e9f"),
+			},
+			&AddressTableEntry{
+				MacAddress: proto.String("c43dc79106a8"),
+				IpAddress: proto.String("1336ec0318683863"),
+			},
+		},
+	}
+	checkProtosEqual(t, &expectedTrace, trace)
 }
