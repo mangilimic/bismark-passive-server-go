@@ -63,7 +63,7 @@ func newTraceParseError(section Section, suberror error) error {
 type sectionError struct {
 	Message  string
 	Suberror error
-	Example *string
+	Example  *string
 }
 
 func (err *sectionError) Error() string {
@@ -78,15 +78,15 @@ func (err *sectionError) Error() string {
 
 func newSectionConversionError(message string, example string, suberror error) error {
 	return &sectionError{
-		Message: message,
+		Message:  message,
 		Suberror: suberror,
-		Example: &example,
+		Example:  &example,
 	}
 }
 
 func newSectionErrorWithSuberror(message string, suberror error) error {
 	return &sectionError{
-		Message: message,
+		Message:  message,
 		Suberror: suberror,
 	}
 }
