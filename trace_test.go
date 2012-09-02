@@ -542,7 +542,7 @@ func TestParseSectionAddressTable_Invalid(t *testing.T) {
 	checkForSectionError(t, parseSectionAddressTable, []string{"10 XX", "MAC1 IP1"})
 }
 
-func TestParseSectionDroppStatistics_Valid(t *testing.T) {
+func TestParseSectionDropStatistics_Valid(t *testing.T) {
 	lines := []string{
 		"10 11",
 		"12 13",
@@ -565,4 +565,10 @@ func TestParseSectionDroppStatistics_Valid(t *testing.T) {
 		},
 	}
 	checkProtosEqual(t, &expectedTrace, &trace)
+}
+
+func TestParseSectionDropStatistics_Invalid(t *testing.T) {
+	checkForSectionError(t, parseSectionDropStatistics, []string{""})
+	checkForSectionError(t, parseSectionDropStatistics, []string{"10"})
+	checkForSectionError(t, parseSectionDropStatistics, []string{"10 11", ""})
 }
