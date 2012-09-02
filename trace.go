@@ -556,21 +556,38 @@ func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
 }
 
 func makeTraceFromSections(sections [][]string) (*Trace, error) {
+	type sectionParser func([]string, *Trace) error
+
 	trace := new(Trace)
 
-	type sectionParser func([]string, *Trace) error
-	sectionsMap := map[Section]sectionParser{
-		SectionIntro:     parseSectionIntro,
-		SectionWhitelist: parseSectionWhitelist,
+	mandatorySectionsMap := map[Section]sectionParser{
+		SectionIntro:         parseSectionIntro,
+		SectionWhitelist:     parseSectionWhitelist,
+		SectionAnonymization: parseSectionAnonymization,
+		SectionPacketSeries:  parseSectionPacketSeries,
+		SectionFlowTable:     parseSectionFlowTable,
+		SectionDnsTableA:     parseSectionDnsTableA,
+		SectionDnsTableCname: parseSectionDnsTableCname,
+		SectionAddressTable:  parseSectionAddressTable,
 	}
-
-	for section, parse := range sectionsMap {
+	for section, parse := range mandatorySectionsMap {
 		if len(sections) <= int(section) {
 			return nil, newTraceParseError(section, newSectionError("missing", nil))
 		}
-		sectionErr := parse(sections[int(section)], trace)
-		if sectionErr != nil {
-			return nil, newTraceParseError(section, sectionErr)
+		if err := parse(sections[int(section)], trace); err != nil {
+			return nil, newTraceParseError(section, err)
+		}
+	}
+
+	optionalSectionsMap := map[Section]sectionParser{
+		SectionDropStatistics: parseSectionDropStatistics,
+	}
+	for section, parse := range optionalSectionsMap {
+		if len(sections) <= int(section) {
+			continue
+		}
+		if err := parse(sections[int(section)], trace); err != nil {
+			return nil, newTraceParseError(section, err)
 		}
 	}
 
