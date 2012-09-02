@@ -541,3 +541,28 @@ func TestParseSectionAddressTable_Invalid(t *testing.T) {
 	checkForSectionError(t, parseSectionAddressTable, []string{"XX 11", "MAC1 IP1"})
 	checkForSectionError(t, parseSectionAddressTable, []string{"10 XX", "MAC1 IP1"})
 }
+
+func TestParseSectionDroppStatistics_Valid(t *testing.T) {
+	lines := []string{
+		"10 11",
+		"12 13",
+	}
+	trace := Trace{}
+	err := parseSectionDropStatistics(lines, &trace)
+	if err != nil {
+		t.Fatal("Unexpected error:", err)
+	}
+	expectedTrace := Trace{
+		DroppedPacketsEntry: []*DroppedPacketsEntry{
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(10),
+				Count: proto.Uint32(11),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(12),
+				Count: proto.Uint32(13),
+			},
+		},
+	}
+	checkProtosEqual(t, &expectedTrace, &trace)
+}

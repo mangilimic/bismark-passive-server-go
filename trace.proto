@@ -79,5 +79,5 @@ message Trace {
   optional int32 address_table_size = 24;
   repeated AddressTableEntry address_table_entry = 25;
 
-  repeated DroppedPacketsEntry dropped_packets = 26;
+  repeated DroppedPacketsEntry dropped_packets_entry = 26;
 }

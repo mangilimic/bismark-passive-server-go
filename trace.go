@@ -530,6 +530,31 @@ func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
+	trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, len(sectionLines))
+	for index, line := range sectionLines {
+		entryWords := words(line)
+		if len(entryWords) < 1 {
+			return newSectionError("missing size in entry", nil)
+		} else if len(entryWords) < 2 {
+			return newSectionError("missing drop count in entry", nil)
+		}
+		newEntry := DroppedPacketsEntry{}
+		if size, err := atou32(entryWords[0]); err != nil {
+			return newSectionError("invalid size in entry", err)
+		} else {
+			newEntry.Size = &size
+		}
+		if count, err := atou32(entryWords[1]); err != nil {
+			return newSectionError("invalid count in entry", err)
+		} else {
+			newEntry.Count = &count
+		}
+		trace.DroppedPacketsEntry[index] = &newEntry
+	}
+	return nil
+}
+
 func makeTraceFromSections(sections [][]string) (*Trace, error) {
 	trace := new(Trace)
 
