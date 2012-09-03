@@ -54,6 +54,9 @@ type TraceParseError struct {
 }
 
 func (err *TraceParseError) Error() string {
+	if err.LineNumber >= 0 {
+		return fmt.Sprintf("Section %s (line %d) %s", err.Section, err.LineNumber+1, err.Suberror)
+	}
 	return fmt.Sprintf("Section %s %s", err.Section, err.Suberror)
 }
 
@@ -61,7 +64,8 @@ func newTraceParseError(section Section, lineNumber int, suberror error) error {
 	return &TraceParseError{
 		Section:    section,
 		LineNumber: lineNumber,
-		Suberror:   suberror}
+		Suberror:   suberror,
+	}
 }
 
 type sectionError struct {
@@ -602,9 +606,9 @@ func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, erro
 		}
 		if err := parse(sections[int(section)], trace); err != nil {
 			if e, ok := err.(*sectionError); ok {
-				return nil, newTraceParseError(section, lineNumbers[int(section)]+e.LineNumber-1, err)
+				return nil, newTraceParseError(section, lineNumbers[int(section)]+e.LineNumber, err)
 			} else {
-				return nil, newTraceParseError(section, lineNumbers[int(section)], err)
+				return nil, newTraceParseError(section, -1, err)
 			}
 		}
 	}
@@ -618,9 +622,9 @@ func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, erro
 		}
 		if err := parse(sections[int(section)], trace); err != nil {
 			if e, ok := err.(*sectionError); ok {
-				return nil, newTraceParseError(section, lineNumbers[int(section)]+e.LineNumber-1, err)
+				return nil, newTraceParseError(section, lineNumbers[int(section)]+e.LineNumber, err)
 			} else {
-				return nil, newTraceParseError(section, lineNumbers[int(section)], err)
+				return nil, newTraceParseError(section, -1, err)
 			}
 		}
 	}

@@ -590,7 +590,7 @@ func TestParseSectionDropStatistics_Invalid(t *testing.T) {
 	checkForSectionError(t, parseSectionDropStatistics, []string{"10 11", ""}, 2)
 }
 
-func TestParseTrace(t *testing.T) {
+func TestParseTrace_Valid(t *testing.T) {
 	fileContents :=
 		`5
 UNKNOWN
@@ -744,4 +744,144 @@ c43dc79106a8 1336ec0318683863
 		},
 	}
 	checkProtosEqual(t, &expectedTrace, trace)
+}
+
+func checkForParseError(t *testing.T, fileContents string, expectedLineNumber int) {
+	reader := strings.NewReader(fileContents)
+	if reader == nil {
+		t.Fatal("Could not create reader")
+	}
+	_, err := ParseTrace(reader)
+	if err == nil {
+		t.Fatalf("Trace should have failed to parse")
+	}
+	e, ok := err.(*TraceParseError)
+	if !ok {
+		t.Fatalf("ParseTrace should have failed with a TraceParseError. Instad failed with: %s", e)
+	}
+	if expectedLineNumber >= 0 && e.LineNumber != expectedLineNumber {
+		t.Fatalf("Expected TraceParseError on line %d. Got line %d instead", expectedLineNumber, e.LineNumber)
+	}
+}
+
+func TestParseTrace_Invalid(t *testing.T) {
+	invalidVersionContents :=
+		`InvalidVersion
+UNKNOWN
+OWC43DC78EE081 1346479358582428 0 1346479388
+138 0 0
+
+google.com
+facebook.com
+youtube.com
+yahoo.com
+amazon.com
+wikipedia.org
+ebay.com
+twitter.com
+
+88698fe15783cd75107714ef91761673c41a7d1f
+
+1346479359146721 0
+0 74 31646
+498 74 25349
+50825 174 34629
+12323 174 36522
+
+1346479359 34 0 0
+829 1 9ccddd49ad2336c5 1 ebd6aae385287e9f 6 5228 46716
+9382 1 8f1b0f1764a0dd3e 1 ebd6aae385287e9f 6 993 52519
+
+0 0
+2 0 0 www.l.google.com 950a8fca863ac696 298
+
+2 0 0 www.google.com 0 www.l.google.com 43198
+
+0 256
+64a769ccb29d ebd6aae385287e9f
+c43dc79106a8 1336ec0318683863
+
+
+`
+	checkForParseError(t, invalidVersionContents, 0)
+
+	invalidBaseTimestampContents :=
+		`5
+UNKNOWN
+OWC43DC78EE081 1346479358582428 0 1346479388
+138 0 0
+
+google.com
+facebook.com
+youtube.com
+yahoo.com
+amazon.com
+wikipedia.org
+ebay.com
+twitter.com
+
+88698fe15783cd75107714ef91761673c41a7d1f
+
+InvalidBaseTimestamp 0
+0 74 31646
+498 74 25349
+50825 174 34629
+12323 174 36522
+
+1346479359 34 0 0
+829 1 9ccddd49ad2336c5 1 ebd6aae385287e9f 6 5228 46716
+9382 1 8f1b0f1764a0dd3e 1 ebd6aae385287e9f 6 993 52519
+
+0 0
+2 0 0 www.l.google.com 950a8fca863ac696 298
+
+2 0 0 www.google.com 0 www.l.google.com 43198
+
+0 256
+64a769ccb29d ebd6aae385287e9f
+c43dc79106a8 1336ec0318683863
+
+
+`
+	checkForParseError(t, invalidBaseTimestampContents, 16)
+
+	invalidAddressTableIndex :=
+		`5
+UNKNOWN
+OWC43DC78EE081 1346479358582428 0 1346479388
+138 0 0
+
+google.com
+facebook.com
+youtube.com
+yahoo.com
+amazon.com
+wikipedia.org
+ebay.com
+twitter.com
+
+88698fe15783cd75107714ef91761673c41a7d1f
+
+1346479359146721 0
+0 74 31646
+498 74 25349
+50825 174 34629
+12323 174 36522
+
+1346479359 34 0 0
+829 1 9ccddd49ad2336c5 1 ebd6aae385287e9f 6 5228 46716
+9382 1 8f1b0f1764a0dd3e 1 ebd6aae385287e9f 6 993 52519
+
+0 0
+2 0 0 www.l.google.com 950a8fca863ac696 298
+
+2 0 0 www.google.com 0 www.l.google.com 43198
+
+InvalidIndex 256
+64a769ccb29d ebd6aae385287e9f
+c43dc79106a8 1336ec0318683863
+
+
+`
+	checkForParseError(t, invalidAddressTableIndex, 31)
 }
