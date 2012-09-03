@@ -82,7 +82,7 @@ func (err *sectionError) Error() string {
 	if err.Example == nil {
 		return fmt.Sprintf("%s: %s", err.Message, err.Suberror)
 	}
-	return fmt.Sprintf("%s (\"%s\"): %s", err.Message, err.Example, err.Suberror)
+	return fmt.Sprintf("%s (\"%s\"): %s", err.Message, *err.Example, err.Suberror)
 }
 
 func newSectionConversionError(message string, lineNumber int, example string, suberror error) error {
@@ -484,11 +484,9 @@ func parseSectionDnsTableCname(sectionLines []string, trace *Trace) error {
 		} else if len(entryWords) < 4 {
 			return newSectionError("missing domain in record", index)
 		} else if len(entryWords) < 5 {
-			return newSectionError("missing CNAME anonymized in record", index)
+			return newSectionError("missing CNAME anonymized (or CNAME) in record", index)
 		} else if len(entryWords) < 6 {
-			return newSectionError("missing CNAME in record", index)
-		} else if len(entryWords) < 7 {
-			return newSectionError("missing TTL id in record", index)
+			return newSectionError("missing CNAME (or TTL id) in record", index)
 		}
 		newEntry := DnsCnameRecord{}
 		if packetId, err := atoi32(entryWords[0]); err != nil {
@@ -507,14 +505,20 @@ func parseSectionDnsTableCname(sectionLines []string, trace *Trace) error {
 			newEntry.DomainAnonymized = &domainAnonymized
 		}
 		newEntry.Domain = &entryWords[3]
-		if cnameAnonymized, err := stringIntToBool(entryWords[4]); err != nil {
-			return newSectionConversionError("invalid CNAME anonymized in record", index, entryWords[4], err)
+		if len(entryWords) == 6 {
+			newEntry.CnameAnonymized = newEntry.DomainAnonymized
+		} else if len(entryWords) >= 7 {
+			if cnameAnonymized, err := stringIntToBool(entryWords[4]); err != nil {
+				return newSectionConversionError("invalid CNAME anonymized in record", index, entryWords[4], err)
+			} else {
+				newEntry.CnameAnonymized = &cnameAnonymized
+			}
 		} else {
-			newEntry.CnameAnonymized = &cnameAnonymized
+			panic("Trace parser error in CNAME section.")
 		}
-		newEntry.Cname = &entryWords[5]
-		if ttl, err := atoi32(entryWords[6]); err != nil {
-			return newSectionConversionError("invalid TTL in record", index, entryWords[6], err)
+		newEntry.Cname = &entryWords[len(entryWords) - 2]
+		if ttl, err := atoi32(entryWords[len(entryWords) - 1]); err != nil {
+			return newSectionConversionError("invalid TTL in record", index, entryWords[len(entryWords) - 1], err)
 		} else {
 			newEntry.Ttl = &ttl
 		}
@@ -563,6 +567,11 @@ func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
 	trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, len(sectionLines))
 	for index, line := range sectionLines {
+		if index == 0 && line[len(line) - 1] == ' ' {
+			// Compensate for a bug where some traces don't leave space for
+			// a dropped packets section and skip to an HTTP URLs section.
+			return nil
+		}
 		entryWords := words(line)
 		if len(entryWords) < 1 {
 			return newSectionError("missing size in entry", index)

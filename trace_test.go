@@ -509,6 +509,61 @@ func TestParseSectionDnsTableCname_Valid(t *testing.T) {
 	checkProtosEqual(t, &expectedTrace, &trace)
 }
 
+func TestParseSectionDnsTableCname_ValidVersion2(t *testing.T) {
+	lines := []string{
+		"12 13 0 DOM1 CN1 14",
+		"15 16 0 DOM2 CN2 17",
+		"18 19 1 DOM3 CN3 20",
+		"21 22 1 DOM4 CN4 23",
+	}
+	trace := Trace{}
+	err := parseSectionDnsTableCname(lines, &trace)
+	if err != nil {
+		t.Fatal("Unexpected error:", err)
+	}
+	expectedTrace := Trace{
+		CnameRecord: []*DnsCnameRecord{
+			&DnsCnameRecord{
+				PacketId:         proto.Int32(12),
+				AddressId:        proto.Int32(13),
+				DomainAnonymized: proto.Bool(false),
+				Domain:           proto.String("DOM1"),
+				CnameAnonymized:  proto.Bool(false),
+				Cname:            proto.String("CN1"),
+				Ttl:              proto.Int32(14),
+			},
+			&DnsCnameRecord{
+				PacketId:         proto.Int32(15),
+				AddressId:        proto.Int32(16),
+				DomainAnonymized: proto.Bool(false),
+				Domain:           proto.String("DOM2"),
+				CnameAnonymized:  proto.Bool(false),
+				Cname:            proto.String("CN2"),
+				Ttl:              proto.Int32(17),
+			},
+			&DnsCnameRecord{
+				PacketId:         proto.Int32(18),
+				AddressId:        proto.Int32(19),
+				DomainAnonymized: proto.Bool(true),
+				Domain:           proto.String("DOM3"),
+				CnameAnonymized:  proto.Bool(true),
+				Cname:            proto.String("CN3"),
+				Ttl:              proto.Int32(20),
+			},
+			&DnsCnameRecord{
+				PacketId:         proto.Int32(21),
+				AddressId:        proto.Int32(22),
+				DomainAnonymized: proto.Bool(true),
+				Domain:           proto.String("DOM4"),
+				CnameAnonymized:  proto.Bool(true),
+				Cname:            proto.String("CN4"),
+				Ttl:              proto.Int32(23),
+			},
+		},
+	}
+	checkProtosEqual(t, &expectedTrace, &trace)
+}
+
 func TestParseSectionDnsTableCname_Invalid(t *testing.T) {
 	checkForSectionError(t, parseSectionDnsTableCname, []string{""}, 1)
 	checkForSectionError(t, parseSectionDnsTableCname, []string{"12"}, 1)
