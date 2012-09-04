@@ -565,13 +565,14 @@ func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 }
 
 func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
+	if len(sectionLines) > 0 && sectionLines[0][len(sectionLines[0]) - 1] == ' ' {
+		// Compensate for a bug where some traces don't leave space for
+		// a dropped packets section and skip to an HTTP URLs section.
+		trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, 0)
+		return nil
+	}
 	trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, len(sectionLines))
 	for index, line := range sectionLines {
-		if index == 0 && line[len(line) - 1] == ' ' {
-			// Compensate for a bug where some traces don't leave space for
-			// a dropped packets section and skip to an HTTP URLs section.
-			return nil
-		}
 		entryWords := words(line)
 		if len(entryWords) < 1 {
 			return newSectionError("missing size in entry", index)
@@ -626,7 +627,7 @@ func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, erro
 		SectionDropStatistics: parseSectionDropStatistics,
 	}
 	for section, parse := range optionalSectionsMap {
-		if len(sections) <= int(section) {
+		if int(section) >= len(sections) {
 			continue
 		}
 		if err := parse(sections[int(section)], trace); err != nil {
@@ -638,6 +639,25 @@ func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, erro
 		}
 	}
 
+	// Fill in nil repeated fields, otherise proto serialization fails.
+	if trace.PacketSeries == nil {
+		trace.PacketSeries = make([]*PacketSeriesEntry, 0)
+	}
+	if trace.FlowTableEntry == nil {
+		trace.FlowTableEntry = make([]*FlowTableEntry, 0)
+	}
+	if trace.ARecord == nil {
+		trace.ARecord = make([]*DnsARecord, 0)
+	}
+	if trace.CnameRecord == nil {
+		trace.CnameRecord = make([]*DnsCnameRecord, 0)
+	}
+	if trace.AddressTableEntry == nil {
+		trace.AddressTableEntry = make([]*AddressTableEntry, 0)
+	}
+	if trace.DroppedPacketsEntry == nil {
+		trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, 0)
+	}
 	return trace, nil
 }
 
