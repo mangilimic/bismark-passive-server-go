@@ -225,8 +225,6 @@ func IndexTraces(tarsPath string, indexPath string) {
 			log.Printf("%s/%s: %s", tarFile, traceName, traceError)
 		}
 
-		currentTars = append(currentTars, tarFile)
-
 		sort.Sort(BySequenceNumber{traces})
 		for _, trace := range traces {
 			chunkPath := indexedChunkPath(indexPath, trace)
@@ -266,6 +264,8 @@ func IndexTraces(tarsPath string, indexPath string) {
 			}
 			currentTraces = append(currentTraces, trace)
 		}
+
+		currentTars = append(currentTars, tarFile)
 	}
 	if len(currentTraces) > 0 {
 		written, tracesRead := writeChunk(*currentChunkPath, currentTraces)
