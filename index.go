@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"code.google.com/p/goprotobuf/proto"
+	"time"
 )
 
 func readTrace(zippedReader io.Reader) (*Trace, error) {
@@ -62,6 +63,11 @@ func indexedChunkPath(indexPath string, trace *Trace) string {
 
 func indexedTarballPath(indexPath string, tarFile string) string {
 	return filepath.Join(indexPath, "tarballs", filepath.Base(tarFile))
+}
+
+func indexerLogPath(indexPath string) string {
+	now := time.Now()
+	return filepath.Join(indexPath, "logs", now.Format("20060102-150405"))
 }
 
 type TraceSlice []*Trace
@@ -149,12 +155,12 @@ func writeChunk(chunkPath string, newTraces []*Trace) (bool, int) {
 	}
 	outputDir := filepath.Dir(chunkPath)
 	if err := os.MkdirAll(outputDir, 0770); err != nil {
-		log.Printf("Error on mkdir %s: %s", outputDir, err)
+		log.Printf("Error on mkdir(%s): %s", outputDir, err)
 		return false, tracesRead
 	}
 	handle, err := os.OpenFile(chunkPath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0660)
 	if err != nil {
-		log.Printf("Error on open %s: %s", chunkPath, err)
+		log.Printf("Error on open(%s): %s", chunkPath, err)
 		return false, tracesRead
 	}
 	defer handle.Close()
@@ -168,6 +174,18 @@ func writeChunk(chunkPath string, newTraces []*Trace) (bool, int) {
 }
 
 func IndexTraces(tarsPath string, indexPath string) {
+	logPath := indexerLogPath(indexPath)
+	indexDir := filepath.Dir(logPath)
+	if err := os.MkdirAll(indexDir, 0770); err != nil {
+		log.Printf("Error on mkdir(%s): %s", indexDir, err)
+	}
+	if handle, err := os.OpenFile(logPath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0660); err != nil {
+		log.Printf("Error opening log file %s: %s", logPath, err)
+		return
+	} else {
+		log.SetOutput(io.MultiWriter(os.Stdout, handle))
+	}
+
 	log.Printf("Scanning index.")
 	tarFiles, err := filepath.Glob(filepath.Join(tarsPath, "*.tar"))
 	if err != nil {
@@ -277,11 +295,11 @@ func IndexTraces(tarsPath string, indexPath string) {
 				symlinkPath := indexedTarballPath(indexPath, tarFile)
 				symlinkDir := filepath.Dir(symlinkPath)
 				if err := os.MkdirAll(symlinkDir, 0770); err != nil {
-					log.Printf("Err on mkdir %s.", symlinkDir)
+					log.Printf("Error on mkdir(%s): %s", symlinkDir, err)
 					tarsLinkFailed.Add(int64(1))
 				}
 				if err := os.Symlink(tarFile, symlinkPath); err != nil {
-					log.Printf("Err creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
+					log.Printf("Error creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
 					tarsLinkFailed.Add(int64(1))
 				}
 				tarsLinked.Add(int64(1))
