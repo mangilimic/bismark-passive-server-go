@@ -6,9 +6,11 @@ import (
 	"expvar"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"code.google.com/p/goprotobuf/proto"
 )
 
@@ -20,8 +22,8 @@ func readTrace(zippedReader io.Reader) (*Trace, error) {
 	return ParseTrace(unzippedReader)
 }
 
-func readTarFile(tarReader io.Reader) (traces map[string]*Trace, traceErrors map[string]error, tarErr error) {
-	traces = map[string]*Trace{}
+func readTarFile(tarReader io.Reader) (traces []*Trace, traceErrors map[string]error, tarErr error) {
+	traces = []*Trace{}
 	traceErrors = map[string]error{}
 	tr := tar.NewReader(tarReader)
 	for {
@@ -37,7 +39,7 @@ func readTarFile(tarReader io.Reader) (traces map[string]*Trace, traceErrors map
 			traceErrors[header.Name] = err
 			continue
 		}
-		traces[header.Name] = trace
+		traces = append(traces, trace)
 	}
 	return
 }
@@ -48,93 +50,121 @@ type indexResult struct {
 	TracesFailed int64
 }
 
-func indexedTracePath(indexPath string, trace *Trace) string {
+func indexedChunkPath(indexPath string, trace *Trace) string {
 	signature := "unanonymized"
 	if trace.AnonymizationSignature != nil {
 		signature = *trace.AnonymizationSignature
 	}
-	sessionId := fmt.Sprint(*trace.ProcessStartTimeMicroseconds)
-	sequenceNumber := fmt.Sprint(*trace.SequenceNumber)
-	return filepath.Join(indexPath, "traces", *trace.NodeId, signature, sessionId, sequenceNumber)
+	chunkingFactor := int32(1000)
+	chunk := *trace.SequenceNumber / chunkingFactor
+	return filepath.Join(indexPath, "traces", fmt.Sprintf("%s-%s", *trace.NodeId, signature), fmt.Sprintf("%d-%d", *trace.ProcessStartTimeMicroseconds, chunk))
 }
 
 func indexedTarballPath(indexPath string, tarFile string) string {
 	return filepath.Join(indexPath, "tarballs", filepath.Base(tarFile))
 }
 
-func indexTraces(tarFile string, indexPath string, rateLimiter chan bool, results chan indexResult) {
-	defer func() { <-rateLimiter }()
+type TraceSlice []*Trace
+type BySequenceNumber struct { TraceSlice }
 
-	result := indexResult{
-		Successful: true,
-		TracesIndexed: int64(0),
-		TracesFailed: int64(0),
+func (traces TraceSlice) Len() int {
+	return len(traces)
+}
+func (traces TraceSlice) Swap(i, j int) {
+	traces[i], traces[j] = traces[j], traces[i]
+}
+func (s BySequenceNumber) Less(i, j int) bool {
+	a := s.TraceSlice[i]
+	b := s.TraceSlice[j]
+	if *a.NodeId < *b.NodeId {
+		return true
 	}
-	defer func() { results <- result }()
+	if *a.NodeId == *b.NodeId &&
+			*a.AnonymizationSignature < *b.AnonymizationSignature {
+		return true
+	}
+	if *a.NodeId == *b.NodeId &&
+			*a.AnonymizationSignature == *b.AnonymizationSignature &&
+			*a.ProcessStartTimeMicroseconds < *b.ProcessStartTimeMicroseconds {
+		return true
+	}
+	if *a.NodeId == *b.NodeId &&
+			*a.AnonymizationSignature == *b.AnonymizationSignature &&
+			*a.ProcessStartTimeMicroseconds == *b.ProcessStartTimeMicroseconds &&
+			*a.SequenceNumber < *b.SequenceNumber {
+		return true
+	}
+	return false
+}
 
-	handle, err := os.Open(tarFile)
+func readTraces(chunkPath string) *Traces {
+	handle, err := os.Open(chunkPath)
 	if err != nil {
-		log.Printf("Error reading %s: %s\n", tarFile, err)
-		result.Successful = false
-		return
+		// Don't log since this isn't an error.
+		return nil
 	}
 	defer handle.Close()
+	unzippedHandle, err := gzip.NewReader(handle)
+	if err != nil {
+		log.Printf("Error unzipping existing chunk from %s: %s", chunkPath, err)
+		return nil
+	}
+	defer unzippedHandle.Close()
+	encoded, err := ioutil.ReadAll(unzippedHandle)
+	if err != nil {
+		log.Printf("Error reading existing chunk from %s: %s", chunkPath, err)
+		return nil
+	}
+	traces := Traces{}
+	if proto.Unmarshal(encoded, &traces) != nil {
+		log.Printf("Error unmarshaling protobuf for %s: %s", chunkPath, err)
+		return nil
+	}
+	return &traces
+}
 
-	traces, traceErrors, tarErr := readTarFile(handle)
-	if tarErr != nil {
-		log.Printf("Error indexing %s: %s\n", tarFile, tarErr)
-		result.Successful = false
-		return
-	}
-	result.TracesFailed += int64(len(traceErrors))
-	for traceName, traceError := range traceErrors {
-		log.Printf("%s/%s: %s", tarFile, traceName, traceError)
-	}
-
-	for filename, trace := range traces {
-		encoded, err := proto.Marshal(trace)
-		if err != nil {
-			log.Printf("Error marshaling protobuf for %s/%s: %s", tarFile, filename, err)
-			result.TracesFailed += int64(1)
-			continue
+func mergeTraces(traces *Traces, newTraces []*Trace) {
+	for _, trace := range newTraces {
+		i := sort.Search(len(traces.Trace), func(i int) bool { return *traces.Trace[i].SequenceNumber >= *trace.SequenceNumber })
+		if i < len(traces.Trace) && traces.Trace[i].SequenceNumber == trace.SequenceNumber {
+			continue;
 		}
-		outputPath := indexedTracePath(indexPath, trace)
-		outputDir := filepath.Dir(outputPath)
-		if err := os.MkdirAll(outputDir, 0770); err != nil {
-			log.Printf("Error on mkdir %s: %s", outputDir, err)
-			result.TracesFailed += int64(1)
-			continue
-		}
-		handle, err := os.OpenFile(outputPath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0660)
-		if err != nil {
-			log.Printf("Error on open %s: %s", outputPath, err)
-			result.TracesFailed += int64(1)
-			continue
-		}
-		if written, err := handle.Write(encoded); err != nil {
-			log.Printf("Error writing %s: %s (Wrote %d bytes)", outputPath, err, written)
-			result.TracesFailed += int64(1)
-			continue
-		}
-		handle.Close()
-		result.TracesIndexed += int64(1)
-	}
-	symlinkPath := indexedTarballPath(indexPath, tarFile)
-	symlinkDir := filepath.Dir(symlinkPath)
-	if err := os.MkdirAll(symlinkDir, 0770); err != nil {
-		log.Printf("Err on mkdir %s.", symlinkDir)
-	}
-	if err := os.Symlink(tarFile, symlinkPath); err != nil {
-		log.Printf("Err creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
+		traces.Trace = append(traces.Trace[:i], append([]*Trace{trace}, traces.Trace[i:]...)...)
 	}
 }
 
-func indexTracesInParallel(tarFiles []string, indexPath string, resultsChan chan indexResult) {
-	rateLimiter := make(chan bool, 16)
-	for _, tarFile := range tarFiles {
-		rateLimiter <- true
-		go indexTraces(tarFile, indexPath, rateLimiter, resultsChan)
+func writeChunk(chunkPath string, newTraces []*Trace) (bool, int) {
+	traces := readTraces(chunkPath)
+	tracesRead := 0
+	if traces == nil {
+		traces = &Traces{Trace: newTraces}
+	} else {
+		tracesRead = len(traces.Trace)
+		mergeTraces(traces, newTraces)
 	}
+	encoded, err := proto.Marshal(traces)
+	if err != nil {
+		log.Printf("Error marshaling protobuf for %s: %s", chunkPath, err)
+		return false, tracesRead
+	}
+	outputDir := filepath.Dir(chunkPath)
+	if err := os.MkdirAll(outputDir, 0770); err != nil {
+		log.Printf("Error on mkdir %s: %s", outputDir, err)
+		return false, tracesRead
+	}
+	handle, err := os.OpenFile(chunkPath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0660)
+	if err != nil {
+		log.Printf("Error on open %s: %s", chunkPath, err)
+		return false, tracesRead
+	}
+	defer handle.Close()
+	zippedHandle := gzip.NewWriter(handle)
+	defer zippedHandle.Close()
+	if written, err := zippedHandle.Write(encoded); err != nil {
+		log.Printf("Error writing %s: %s (Wrote %d bytes)", chunkPath, err, written)
+		return false, tracesRead
+	}
+	return true, tracesRead
 }
 
 func IndexTraces(tarsPath string, indexPath string) {
@@ -145,21 +175,124 @@ func IndexTraces(tarsPath string, indexPath string) {
 	}
 	log.Printf("Indexing %d tarballs.", len(tarFiles))
 
-	resultsChan := make(chan indexResult)
-	go indexTracesInParallel(tarFiles, indexPath, resultsChan)
-
+	chunksIndexed := expvar.NewInt("bismarkpassive.ChunksIndexed")
+	chunksFailed := expvar.NewInt("bismarkpassive.ChunksFailed")
+	chunksReread := expvar.NewInt("bismarkpassive.ChunksReread")
 	tarsIndexed := expvar.NewInt("bismarkpassive.TarsIndexed")
 	tarsFailed := expvar.NewInt("bismarkpassive.TarsFailed")
+	tarsSkipped := expvar.NewInt("bismarkpassive.TarsSkipped")
+	tarsInvalidLink := expvar.NewInt("bismarkpassive.TarsSkippedInvalidLink")
+	tarsLinked := expvar.NewInt("bismarkpassive.TarsLinked")
+	tarsLinkFailed := expvar.NewInt("bismarkpassive.TarsLinkFailed")
 	tracesIndexed := expvar.NewInt("bismarkpassive.TracesIndexed")
 	tracesFailed := expvar.NewInt("bismarkpassive.TracesFailed")
-	for result := range resultsChan {
-		if result.Successful {
-			tarsIndexed.Add(int64(1))
-		} else {
-			tarsFailed.Add(int64(1))
+	tracesReread := expvar.NewInt("bismarkpassive.TracesReread")
+
+	sort.Strings(tarFiles)
+
+	var currentChunkPath *string = nil
+	currentTraces := make([]*Trace, 0)
+	currentTars := make([]string, 0)
+	for _, tarFile := range tarFiles {
+		symlinkPath := indexedTarballPath(indexPath, tarFile)
+		linkDestination, err := os.Readlink(symlinkPath)
+		if err == nil {
+			if linkDestination == tarFile {
+				tarsSkipped.Add(int64(1))
+				continue
+			}
+			tarsInvalidLink.Add(int64(1))
 		}
-		tracesIndexed.Add(result.TracesIndexed)
-		tracesFailed.Add(result.TracesFailed)
+
+		handle, err := os.Open(tarFile)
+		if err != nil {
+			log.Printf("Error reading %s: %s\n", tarFile, err)
+			tarsFailed.Add(int64(1))
+			continue
+		}
+
+		traces, traceErrors, tarErr := readTarFile(handle)
+		if tarErr != nil {
+			log.Printf("Error indexing %s: %s\n", tarFile, tarErr)
+			tarsFailed.Add(int64(1))
+			handle.Close()
+			continue
+		}
+		handle.Close()
+		tracesFailed.Add(int64(len(traceErrors)))
+		for traceName, traceError := range traceErrors {
+			log.Printf("%s/%s: %s", tarFile, traceName, traceError)
+		}
+
+		currentTars = append(currentTars, tarFile)
+
+		sort.Sort(BySequenceNumber{traces})
+		for _, trace := range traces {
+			chunkPath := indexedChunkPath(indexPath, trace)
+			if currentChunkPath == nil || chunkPath != *currentChunkPath {
+				if currentChunkPath != nil {
+					written, tracesRead := writeChunk(*currentChunkPath, currentTraces)
+					if written {
+						chunksIndexed.Add(int64(1))
+						tracesIndexed.Add(int64(len(currentTraces)))
+						tarsIndexed.Add(int64(len(currentTars)))
+						for _, tarFile := range currentTars {
+							symlinkPath := indexedTarballPath(indexPath, tarFile)
+							symlinkDir := filepath.Dir(symlinkPath)
+							if err := os.MkdirAll(symlinkDir, 0770); err != nil {
+								log.Printf("Err on mkdir %s.", symlinkDir)
+								tarsLinkFailed.Add(int64(1))
+							}
+							if err := os.Symlink(tarFile, symlinkPath); err != nil {
+								log.Printf("Err creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
+								tarsLinkFailed.Add(int64(1))
+							}
+							tarsLinked.Add(int64(1))
+						}
+					} else {
+						chunksFailed.Add(int64(1))
+						tarsFailed.Add(int64(len(currentTars)))
+						tracesFailed.Add(int64(len(currentTraces)))
+					}
+					if (tracesRead > 0) {
+						chunksReread.Add(int64(1))
+						tracesReread.Add(int64(tracesRead))
+					}
+				}
+				currentChunkPath = &chunkPath
+				currentTraces = make([]*Trace, 0)
+				currentTars = make([]string, 0)
+			}
+			currentTraces = append(currentTraces, trace)
+		}
 	}
-	log.Println("Done indexing.")
+	if len(currentTraces) > 0 {
+		written, tracesRead := writeChunk(*currentChunkPath, currentTraces)
+		if written {
+			chunksIndexed.Add(int64(1))
+			tarsIndexed.Add(int64(len(currentTars)))
+			tracesIndexed.Add(int64(len(currentTraces)))
+			for _, tarFile := range currentTars {
+				symlinkPath := indexedTarballPath(indexPath, tarFile)
+				symlinkDir := filepath.Dir(symlinkPath)
+				if err := os.MkdirAll(symlinkDir, 0770); err != nil {
+					log.Printf("Err on mkdir %s.", symlinkDir)
+					tarsLinkFailed.Add(int64(1))
+				}
+				if err := os.Symlink(tarFile, symlinkPath); err != nil {
+					log.Printf("Err creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
+					tarsLinkFailed.Add(int64(1))
+				}
+				tarsLinked.Add(int64(1))
+			}
+		} else {
+			chunksFailed.Add(int64(1))
+			tarsFailed.Add(int64(len(currentTars)))
+			tracesFailed.Add(int64(len(currentTraces)))
+		}
+		if (tracesRead > 0) {
+			chunksReread.Add(int64(1))
+			tracesReread.Add(int64(tracesRead))
+		}
+	}
 }
