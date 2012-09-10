@@ -168,6 +168,7 @@ func writeChunk(chunkPath string, newTraces []*Trace) (bool, int) {
 }
 
 func IndexTraces(tarsPath string, indexPath string) {
+	log.Printf("Scanning index.")
 	tarFiles, err := filepath.Glob(filepath.Join(tarsPath, "*.tar"))
 	if err != nil {
 		log.Println("Error enumerating tarballs: ", err)
@@ -295,4 +296,7 @@ func IndexTraces(tarsPath string, indexPath string) {
 			tracesReread.Add(int64(tracesRead))
 		}
 	}
+	log.Printf("Done.")
+	log.Printf("Final values of exported variables:")
+	expvar.Do(func(keyValue expvar.KeyValue) { log.Printf("%s: %s", keyValue.Key, keyValue.Value) })
 }
