@@ -565,12 +565,13 @@ func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 }
 
 func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
-	numLines := len(sectionLines)
 	// Compensate for a bug where some traces don't leave space for
 	// a dropped packets section and skip to an HTTP URLs section.
+	numLines := len(sectionLines)
 	for index, line := range sectionLines {
 		if line != "" && line[len(line) - 1] == ' ' {
 			numLines = index
+			break
 		}
 	}
 	trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, numLines)

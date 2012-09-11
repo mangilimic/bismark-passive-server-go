@@ -641,9 +641,28 @@ func TestParseSectionDropStatistics_Valid(t *testing.T) {
 
 func TestParseSectionDropStatistics_SpecialCase(t *testing.T) {
 	lines := []string{
-		"10 11",
-		"12 13",
+		"46 1",
+		"54 5045",
+		"66 24",
+		"70 5045",
+		"78 2",
+		"86 4",
+		"471 3",
+		"503 2",
 		"0 ",
+		"45040 0 971ca2633ac88795417ae7fe2cbe0b1c4e4e81e9 ",
+		"42037 0 8f4b37654010a76ce51a5b106e8a509ff9640a8d ",
+		"27205 0 9dd31a9075cee81145ed4fc512b5478c9feb5286 ",
+		"50217 0 4ffb6bcd29198c3b6b3d8c1e187b664239ef05c3 ",
+		"42131 0 5b08d72928bc5fb4da6501e771fcbfed9d663727 ",
+		"21158 0 db0fd8423140f5c87c3e34918d1b91de23b6470a ",
+		"2142 0 1bc8aaad35d173059a5276c85c1f9e12f3ff0f82 ",
+		"45040 0 1c51228ea9df75f9625b75b2011e222b55aaed09 ",
+		"42037 0 100b0364200d2c5d42f945f519cd05be330566d1 ",
+		"50217 0 9a201807ad1f6490671cd0aa71928baeb3dff8b8 ",
+		"21623 0 51a3f9b8cfb31f7766db2c16f9b1c12150df856e ",
+		"42037 0 00ced0d000ceb980000000100000002170697865 ",
+		"24378 0 cd5a8cdfaaeb08719c14ceaf3a5f83bc69202559 ",
 	}
 	trace := Trace{}
 	err := parseSectionDropStatistics(lines, &trace)
@@ -653,12 +672,36 @@ func TestParseSectionDropStatistics_SpecialCase(t *testing.T) {
 	expectedTrace := Trace{
 		DroppedPacketsEntry: []*DroppedPacketsEntry{
 			&DroppedPacketsEntry{
-				Size:  proto.Uint32(10),
-				Count: proto.Uint32(11),
+				Size:  proto.Uint32(46),
+				Count: proto.Uint32(1),
 			},
 			&DroppedPacketsEntry{
-				Size:  proto.Uint32(12),
-				Count: proto.Uint32(13),
+				Size:  proto.Uint32(54),
+				Count: proto.Uint32(5045),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(66),
+				Count: proto.Uint32(24),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(70),
+				Count: proto.Uint32(5045),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(78),
+				Count: proto.Uint32(2),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(86),
+				Count: proto.Uint32(4),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(471),
+				Count: proto.Uint32(3),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(503),
+				Count: proto.Uint32(2),
 			},
 		},
 	}
