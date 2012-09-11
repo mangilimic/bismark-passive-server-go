@@ -565,14 +565,16 @@ func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 }
 
 func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
-	if len(sectionLines) > 0 && sectionLines[0][len(sectionLines[0]) - 1] == ' ' {
-		// Compensate for a bug where some traces don't leave space for
-		// a dropped packets section and skip to an HTTP URLs section.
-		trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, 0)
-		return nil
-	}
-	trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, len(sectionLines))
+	numLines := len(sectionLines)
+	// Compensate for a bug where some traces don't leave space for
+	// a dropped packets section and skip to an HTTP URLs section.
 	for index, line := range sectionLines {
+		if line != "" && line[len(line) - 1] == ' ' {
+			numLines = index
+		}
+	}
+	trace.DroppedPacketsEntry = make([]*DroppedPacketsEntry, numLines)
+	for index, line := range sectionLines[:numLines] {
 		entryWords := words(line)
 		if len(entryWords) < 1 {
 			return newSectionError("missing size in entry", index)

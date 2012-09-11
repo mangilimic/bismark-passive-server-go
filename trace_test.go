@@ -639,6 +639,32 @@ func TestParseSectionDropStatistics_Valid(t *testing.T) {
 	checkProtosEqual(t, &expectedTrace, &trace)
 }
 
+func TestParseSectionDropStatistics_SpecialCase(t *testing.T) {
+	lines := []string{
+		"10 11",
+		"12 13",
+		"0 ",
+	}
+	trace := Trace{}
+	err := parseSectionDropStatistics(lines, &trace)
+	if err != nil {
+		t.Fatal("Unexpected error:", err)
+	}
+	expectedTrace := Trace{
+		DroppedPacketsEntry: []*DroppedPacketsEntry{
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(10),
+				Count: proto.Uint32(11),
+			},
+			&DroppedPacketsEntry{
+				Size:  proto.Uint32(12),
+				Count: proto.Uint32(13),
+			},
+		},
+	}
+	checkProtosEqual(t, &expectedTrace, &trace)
+}
+
 func TestParseSectionDropStatistics_Invalid(t *testing.T) {
 	checkForSectionError(t, parseSectionDropStatistics, []string{""}, 1)
 	checkForSectionError(t, parseSectionDropStatistics, []string{"10"}, 1)
