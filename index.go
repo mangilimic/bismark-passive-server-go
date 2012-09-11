@@ -173,7 +173,7 @@ func writeChunk(chunkPath string, newTraces []*Trace) (bool, int) {
 	return true, tracesRead
 }
 
-func IndexTraces(tarsPath string, indexPath string) {
+func initializeLogging(indexPath string) {
 	logPath := indexerLogPath(indexPath)
 	indexDir := filepath.Dir(logPath)
 	if err := os.MkdirAll(indexDir, 0770); err != nil {
@@ -185,18 +185,23 @@ func IndexTraces(tarsPath string, indexPath string) {
 	} else {
 		log.SetOutput(io.MultiWriter(os.Stdout, handle))
 	}
+}
 
-	log.Printf("Scanning index.")
+func IndexTraces(tarsPath string, indexPath string) {
+	initializeLogging(indexPath)
+
+	log.Printf("Scanning tarballs.")
 	tarFiles, err := filepath.Glob(filepath.Join(tarsPath, "*.tar"))
 	if err != nil {
 		log.Println("Error enumerating tarballs: ", err)
 		return
 	}
-	log.Printf("Indexing %d tarballs.", len(tarFiles))
+	log.Printf("%d tarballs available.", len(tarFiles))
 
 	chunksIndexed := expvar.NewInt("bismarkpassive.ChunksIndexed")
 	chunksFailed := expvar.NewInt("bismarkpassive.ChunksFailed")
 	chunksReread := expvar.NewInt("bismarkpassive.ChunksReread")
+	tarsScanned := expvar.NewInt("bismarkpassive.TarsScanned")
 	tarsIndexed := expvar.NewInt("bismarkpassive.TarsIndexed")
 	tarsFailed := expvar.NewInt("bismarkpassive.TarsFailed")
 	tarsSkipped := expvar.NewInt("bismarkpassive.TarsSkipped")
@@ -207,12 +212,28 @@ func IndexTraces(tarsPath string, indexPath string) {
 	tracesFailed := expvar.NewInt("bismarkpassive.TracesFailed")
 	tracesReread := expvar.NewInt("bismarkpassive.TracesReread")
 
-	sort.Strings(tarFiles)
+	log.Printf("Scanning index.")
+	tarFilesToIndex := make([]string, 0)
+	for _, tarFile := range tarFiles {
+		tarsScanned.Add(int64(1))
+		symlinkPath := indexedTarballPath(indexPath, tarFile)
+		linkDestination, err := os.Readlink(symlinkPath)
+		if err == nil {
+			if linkDestination == tarFile {
+				tarsSkipped.Add(int64(1))
+				continue
+			}
+			tarsInvalidLink.Add(int64(1))
+		}
+		tarFilesToIndex = append(tarFilesToIndex, tarFile)
+	}
+	log.Printf("Indexing %d tarballs.", len(tarFilesToIndex))
 
 	var currentChunkPath *string = nil
 	currentTraces := make([]*Trace, 0)
 	currentTars := make([]string, 0)
-	for _, tarFile := range tarFiles {
+	sort.Strings(tarFilesToIndex)
+	for _, tarFile := range tarFilesToIndex {
 		symlinkPath := indexedTarballPath(indexPath, tarFile)
 		linkDestination, err := os.Readlink(symlinkPath)
 		if err == nil {
