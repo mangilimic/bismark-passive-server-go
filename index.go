@@ -139,7 +139,7 @@ func mergeTraces(traces *Traces, newTraces []*Trace) {
 	}
 }
 
-func writeChunk(chunkPath string, newTraces []*Trace) (bool, int) {
+func writeChunk(indexPath string, chunkPath string, newTraces []*Trace) (bool, int) {
 	traces := readTraces(chunkPath)
 	tracesRead := 0
 	if traces == nil {
@@ -158,16 +158,23 @@ func writeChunk(chunkPath string, newTraces []*Trace) (bool, int) {
 		log.Printf("Error on mkdir(%s): %s", outputDir, err)
 		return false, tracesRead
 	}
-	handle, err := os.OpenFile(chunkPath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0660)
+	chunkHandle, err := ioutil.TempFile(filepath.Join(indexPath, "tmp"), "chunk")
 	if err != nil {
-		log.Printf("Error on open(%s): %s", chunkPath, err)
+		log.Printf("Error creating temporary file: %s", err)
 		return false, tracesRead
 	}
-	defer handle.Close()
-	zippedHandle := gzip.NewWriter(handle)
-	defer zippedHandle.Close()
+	tempChunkPath := chunkHandle.Name()
+	zippedHandle := gzip.NewWriter(chunkHandle)
 	if written, err := zippedHandle.Write(encoded); err != nil {
 		log.Printf("Error writing %s: %s (Wrote %d bytes)", chunkPath, err, written)
+		zippedHandle.Close()
+		chunkHandle.Close()
+		return false, tracesRead
+	}
+	zippedHandle.Close()
+	chunkHandle.Close()
+	if err := os.Rename(tempChunkPath, chunkPath); err != nil {
+		log.Printf("Error on rename(%s, %s): %s", tempChunkPath, chunkPath, err)
 		return false, tracesRead
 	}
 	return true, tracesRead
@@ -269,7 +276,7 @@ func IndexTraces(tarsPath string, indexPath string) {
 			chunkPath := indexedChunkPath(indexPath, trace)
 			if currentChunkPath == nil || chunkPath != *currentChunkPath {
 				if currentChunkPath != nil {
-					written, tracesRead := writeChunk(*currentChunkPath, currentTraces)
+					written, tracesRead := writeChunk(indexPath, *currentChunkPath, currentTraces)
 					if written {
 						chunksIndexed.Add(int64(1))
 						tracesIndexed.Add(int64(len(currentTraces)))
@@ -307,7 +314,7 @@ func IndexTraces(tarsPath string, indexPath string) {
 		currentTars = append(currentTars, tarFile)
 	}
 	if len(currentTraces) > 0 {
-		written, tracesRead := writeChunk(*currentChunkPath, currentTraces)
+		written, tracesRead := writeChunk(indexPath, *currentChunkPath, currentTraces)
 		if written {
 			chunksIndexed.Add(int64(1))
 			tarsIndexed.Add(int64(len(currentTars)))
