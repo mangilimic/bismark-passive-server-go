@@ -129,11 +129,34 @@ func readTraces(chunkPath string) *Traces {
 	return &traces
 }
 
+func traceSessionString(trace *Trace) string {
+	nodeId := "<undefined>"
+	if trace.NodeId != nil {
+		nodeId = *trace.NodeId
+	}
+	anonymizationSignature := "<undefined>"
+	if trace.AnonymizationSignature != nil {
+		anonymizationSignature = *trace.AnonymizationSignature
+	}
+	sessionId := "<undefined>"
+	if trace.ProcessStartTimeMicroseconds != nil {
+		sessionId = fmt.Sprintf("%v", *trace.ProcessStartTimeMicroseconds)
+	}
+	sequenceNumber := "<undefined>"
+	if trace.SequenceNumber != nil {
+		sequenceNumber = fmt.Sprintf("%v", *trace.SequenceNumber)
+	}
+	return fmt.Sprintf("%v-%v-%v-%v", nodeId, anonymizationSignature, sessionId, sequenceNumber)
+}
+
 func mergeTraces(traces *Traces, newTraces []*Trace) {
 	for _, trace := range newTraces {
 		i := sort.Search(len(traces.Trace), func(i int) bool { return *traces.Trace[i].SequenceNumber >= *trace.SequenceNumber })
-		if i < len(traces.Trace) && traces.Trace[i].SequenceNumber == trace.SequenceNumber {
-			continue;
+		if i < len(traces.Trace) && *traces.Trace[i].SequenceNumber == *trace.SequenceNumber {
+			if !proto.Equal(trace, traces.Trace[i]) {
+				log.Printf("Found distinct traces with duplicate sequence numbers: %v", traceSessionString(trace))
+			}
+			continue
 		}
 		traces.Trace = append(traces.Trace[:i], append([]*Trace{trace}, traces.Trace[i:]...)...)
 	}
@@ -158,7 +181,12 @@ func writeChunk(indexPath string, chunkPath string, newTraces []*Trace) (bool, i
 		log.Printf("Error on mkdir(%s): %s", outputDir, err)
 		return false, tracesRead
 	}
-	chunkHandle, err := ioutil.TempFile(filepath.Join(indexPath, "tmp"), "chunk")
+	tempDir := filepath.Join(indexPath, "tmp")
+	if err := os.MkdirAll(tempDir, 0770); err != nil {
+		log.Printf("Error on mkdir(%s): %s", tempDir, err)
+		return false, tracesRead
+	}
+	chunkHandle, err := ioutil.TempFile(tempDir, "chunk")
 	if err != nil {
 		log.Printf("Error creating temporary file: %s", err)
 		return false, tracesRead
@@ -236,6 +264,36 @@ func IndexTraces(tarsPath string, indexPath string) {
 	}
 	log.Printf("Indexing %d tarballs.", len(tarFilesToIndex))
 
+	writeChunkAndSymlink := func(currentChunkPath string, currentTraces []*Trace, currentTars []string) {
+		written, tracesRead := writeChunk(indexPath, currentChunkPath, currentTraces)
+		if written {
+			chunksIndexed.Add(int64(1))
+			tracesIndexed.Add(int64(len(currentTraces)))
+			tarsIndexed.Add(int64(len(currentTars)))
+			for _, tarFile := range currentTars {
+				symlinkPath := indexedTarballPath(indexPath, tarFile)
+				symlinkDir := filepath.Dir(symlinkPath)
+				if err := os.MkdirAll(symlinkDir, 0770); err != nil {
+					log.Printf("Err on mkdir %s.", symlinkDir)
+					tarsLinkFailed.Add(int64(1))
+				}
+				if err := os.Symlink(tarFile, symlinkPath); err != nil {
+					log.Printf("Err creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
+					tarsLinkFailed.Add(int64(1))
+				}
+				tarsLinked.Add(int64(1))
+			}
+		} else {
+			chunksFailed.Add(int64(1))
+			tarsFailed.Add(int64(len(currentTars)))
+			tracesFailed.Add(int64(len(currentTraces)))
+		}
+		if (tracesRead > 0) {
+			chunksReread.Add(int64(1))
+			tracesReread.Add(int64(tracesRead))
+		}
+	}
+
 	var currentChunkPath *string = nil
 	currentTraces := make([]*Trace, 0)
 	currentTars := make([]string, 0)
@@ -257,7 +315,6 @@ func IndexTraces(tarsPath string, indexPath string) {
 			tarsFailed.Add(int64(1))
 			continue
 		}
-
 		traces, traceErrors, tarErr := readTarFile(handle)
 		if tarErr != nil {
 			log.Printf("Error indexing %s: %s\n", tarFile, tarErr)
@@ -276,33 +333,7 @@ func IndexTraces(tarsPath string, indexPath string) {
 			chunkPath := indexedChunkPath(indexPath, trace)
 			if currentChunkPath == nil || chunkPath != *currentChunkPath {
 				if currentChunkPath != nil {
-					written, tracesRead := writeChunk(indexPath, *currentChunkPath, currentTraces)
-					if written {
-						chunksIndexed.Add(int64(1))
-						tracesIndexed.Add(int64(len(currentTraces)))
-						tarsIndexed.Add(int64(len(currentTars)))
-						for _, tarFile := range currentTars {
-							symlinkPath := indexedTarballPath(indexPath, tarFile)
-							symlinkDir := filepath.Dir(symlinkPath)
-							if err := os.MkdirAll(symlinkDir, 0770); err != nil {
-								log.Printf("Err on mkdir %s.", symlinkDir)
-								tarsLinkFailed.Add(int64(1))
-							}
-							if err := os.Symlink(tarFile, symlinkPath); err != nil {
-								log.Printf("Err creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
-								tarsLinkFailed.Add(int64(1))
-							}
-							tarsLinked.Add(int64(1))
-						}
-					} else {
-						chunksFailed.Add(int64(1))
-						tarsFailed.Add(int64(len(currentTars)))
-						tracesFailed.Add(int64(len(currentTraces)))
-					}
-					if (tracesRead > 0) {
-						chunksReread.Add(int64(1))
-						tracesReread.Add(int64(tracesRead))
-					}
+					writeChunkAndSymlink(*currentChunkPath, currentTraces, currentTars)
 				}
 				currentChunkPath = &chunkPath
 				currentTraces = make([]*Trace, 0)
@@ -314,33 +345,7 @@ func IndexTraces(tarsPath string, indexPath string) {
 		currentTars = append(currentTars, tarFile)
 	}
 	if len(currentTraces) > 0 {
-		written, tracesRead := writeChunk(indexPath, *currentChunkPath, currentTraces)
-		if written {
-			chunksIndexed.Add(int64(1))
-			tarsIndexed.Add(int64(len(currentTars)))
-			tracesIndexed.Add(int64(len(currentTraces)))
-			for _, tarFile := range currentTars {
-				symlinkPath := indexedTarballPath(indexPath, tarFile)
-				symlinkDir := filepath.Dir(symlinkPath)
-				if err := os.MkdirAll(symlinkDir, 0770); err != nil {
-					log.Printf("Error on mkdir(%s): %s", symlinkDir, err)
-					tarsLinkFailed.Add(int64(1))
-				}
-				if err := os.Symlink(tarFile, symlinkPath); err != nil {
-					log.Printf("Error creating symlink from %s to %s: %s. This tarball will probably be reprocessed later.", tarFile, symlinkPath, err)
-					tarsLinkFailed.Add(int64(1))
-				}
-				tarsLinked.Add(int64(1))
-			}
-		} else {
-			chunksFailed.Add(int64(1))
-			tarsFailed.Add(int64(len(currentTars)))
-			tracesFailed.Add(int64(len(currentTraces)))
-		}
-		if (tracesRead > 0) {
-			chunksReread.Add(int64(1))
-			tracesReread.Add(int64(tracesRead))
-		}
+		writeChunkAndSymlink(*currentChunkPath, currentTraces, currentTars)
 	}
 	log.Printf("Done.")
 	log.Printf("Final values of exported variables:")
