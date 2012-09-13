@@ -2,6 +2,7 @@ package bismarkpassive
 
 import (
 	"archive/tar"
+	"code.google.com/p/goprotobuf/proto"
 	"compress/gzip"
 	"expvar"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"code.google.com/p/goprotobuf/proto"
 	"time"
 )
 
@@ -28,7 +28,7 @@ func readTarFile(tarReader io.Reader) (traces []*Trace, traceErrors map[string]e
 	traceErrors = map[string]error{}
 	tr := tar.NewReader(tarReader)
 	for {
-		header, err := tr.Next();
+		header, err := tr.Next()
 		if err == io.EOF {
 			break
 		} else if err != nil {
@@ -46,9 +46,9 @@ func readTarFile(tarReader io.Reader) (traces []*Trace, traceErrors map[string]e
 }
 
 type indexResult struct {
-	Successful bool
+	Successful    bool
 	TracesIndexed int64
-	TracesFailed int64
+	TracesFailed  int64
 }
 
 func indexedChunkPath(indexPath string, trace *Trace) string {
@@ -71,7 +71,7 @@ func indexerLogPath(indexPath string) string {
 }
 
 type TraceSlice []*Trace
-type BySequenceNumber struct { TraceSlice }
+type BySequenceNumber struct{ TraceSlice }
 
 func (traces TraceSlice) Len() int {
 	return len(traces)
@@ -86,18 +86,18 @@ func (s BySequenceNumber) Less(i, j int) bool {
 		return true
 	}
 	if *a.NodeId == *b.NodeId &&
-			*a.AnonymizationSignature < *b.AnonymizationSignature {
+		*a.AnonymizationSignature < *b.AnonymizationSignature {
 		return true
 	}
 	if *a.NodeId == *b.NodeId &&
-			*a.AnonymizationSignature == *b.AnonymizationSignature &&
-			*a.ProcessStartTimeMicroseconds < *b.ProcessStartTimeMicroseconds {
+		*a.AnonymizationSignature == *b.AnonymizationSignature &&
+		*a.ProcessStartTimeMicroseconds < *b.ProcessStartTimeMicroseconds {
 		return true
 	}
 	if *a.NodeId == *b.NodeId &&
-			*a.AnonymizationSignature == *b.AnonymizationSignature &&
-			*a.ProcessStartTimeMicroseconds == *b.ProcessStartTimeMicroseconds &&
-			*a.SequenceNumber < *b.SequenceNumber {
+		*a.AnonymizationSignature == *b.AnonymizationSignature &&
+		*a.ProcessStartTimeMicroseconds == *b.ProcessStartTimeMicroseconds &&
+		*a.SequenceNumber < *b.SequenceNumber {
 		return true
 	}
 	return false
@@ -214,7 +214,7 @@ func initializeLogging(indexPath string) {
 	if err := os.MkdirAll(indexDir, 0770); err != nil {
 		log.Printf("Error on mkdir(%s): %s", indexDir, err)
 	}
-	if handle, err := os.OpenFile(logPath, os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0660); err != nil {
+	if handle, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660); err != nil {
 		log.Printf("Error opening log file %s: %s", logPath, err)
 		return
 	} else {
@@ -288,7 +288,7 @@ func IndexTraces(tarsPath string, indexPath string) {
 			tarsFailed.Add(int64(len(currentTars)))
 			tracesFailed.Add(int64(len(currentTraces)))
 		}
-		if (tracesRead > 0) {
+		if tracesRead > 0 {
 			chunksReread.Add(int64(1))
 			tracesReread.Add(int64(tracesRead))
 		}

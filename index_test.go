@@ -63,7 +63,7 @@ func TestMergeTraces_Overlap(t *testing.T) {
 		},
 		&Trace{
 			SequenceNumber: proto.Int32(12),
-			NodeId: proto.String("additional field"),
+			NodeId:         proto.String("additional field"),
 		},
 	}
 

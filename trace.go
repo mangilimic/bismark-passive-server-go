@@ -516,9 +516,9 @@ func parseSectionDnsTableCname(sectionLines []string, trace *Trace) error {
 		} else {
 			panic("Trace parser error in CNAME section.")
 		}
-		newEntry.Cname = &entryWords[len(entryWords) - 2]
-		if ttl, err := atoi32(entryWords[len(entryWords) - 1]); err != nil {
-			return newSectionConversionError("invalid TTL in record", index, entryWords[len(entryWords) - 1], err)
+		newEntry.Cname = &entryWords[len(entryWords)-2]
+		if ttl, err := atoi32(entryWords[len(entryWords)-1]); err != nil {
+			return newSectionConversionError("invalid TTL in record", index, entryWords[len(entryWords)-1], err)
 		} else {
 			newEntry.Ttl = &ttl
 		}
@@ -569,7 +569,7 @@ func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
 	// a dropped packets section and skip to an HTTP URLs section.
 	numLines := len(sectionLines)
 	for index, line := range sectionLines {
-		if line != "" && line[len(line) - 1] == ' ' {
+		if line != "" && line[len(line)-1] == ' ' {
 			numLines = index
 			break
 		}
