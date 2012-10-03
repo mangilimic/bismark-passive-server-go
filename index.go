@@ -103,7 +103,7 @@ func (s BySequenceNumber) Less(i, j int) bool {
 	return false
 }
 
-func readTraces(chunkPath string) *Traces {
+func readChunk(chunkPath string) *Traces {
 	handle, err := os.Open(chunkPath)
 	if err != nil {
 		// Don't log since this isn't an error.
@@ -163,7 +163,7 @@ func mergeTraces(traces *Traces, newTraces []*Trace) {
 }
 
 func writeChunk(indexPath string, chunkPath string, newTraces []*Trace) (bool, int) {
-	traces := readTraces(chunkPath)
+	traces := readChunk(chunkPath)
 	tracesRead := 0
 	if traces == nil {
 		traces = &Traces{Trace: newTraces}
