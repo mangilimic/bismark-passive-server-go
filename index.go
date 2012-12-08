@@ -56,7 +56,7 @@ func indexedChunkPath(indexPath string, trace *Trace) string {
 	if trace.AnonymizationSignature != nil {
 		signature = *trace.AnonymizationSignature
 	}
-	chunkingFactor := int32(1000)
+	chunkingFactor := int32(100)
 	chunk := *trace.SequenceNumber / chunkingFactor
 	return filepath.Join(indexPath, "traces", fmt.Sprintf("%s-%s", *trace.NodeId, signature), fmt.Sprintf("%d-%d", *trace.ProcessStartTimeMicroseconds, chunk))
 }
