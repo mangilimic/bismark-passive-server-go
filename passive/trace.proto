@@ -1,4 +1,4 @@
-package bismarkpassive;
+package passive;
 
 message PacketSeriesEntry {
   optional int64 timestamp_microseconds = 1;

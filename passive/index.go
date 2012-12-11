@@ -1,4 +1,4 @@
-package bismarkpassive
+package passive
 
 import (
 	"archive/tar"

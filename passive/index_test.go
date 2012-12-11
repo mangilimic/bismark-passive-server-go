@@ -1,4 +1,4 @@
-package bismarkpassive
+package passive
 
 import (
 	"code.google.com/p/goprotobuf/proto"

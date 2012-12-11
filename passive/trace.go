@@ -1,4 +1,4 @@
-package bismarkpassive
+package passive
 
 import (
 	"bytes"
@@ -25,28 +25,31 @@ const (
 )
 
 func (section Section) String() string {
-	if section == SectionIntro {
+	switch section {
+	case SectionIntro:
 		return "intro"
-	} else if section == SectionWhitelist {
+	case SectionWhitelist:
 		return "whitelist"
-	} else if section == SectionAnonymization {
+	case SectionAnonymization:
 		return "anonymization"
-	} else if section == SectionPacketSeries {
+	case SectionPacketSeries:
 		return "packet series"
-	} else if section == SectionFlowTable {
+	case SectionFlowTable:
 		return "flow table"
-	} else if section == SectionDnsTableA {
+	case SectionDnsTableA:
 		return "DNS A records"
-	} else if section == SectionDnsTableCname {
+	case SectionDnsTableCname:
 		return "DNS CNAME records"
-	} else if section == SectionAddressTable {
+	case SectionAddressTable:
 		return "MAC addresses"
-	} else if section == SectionDropStatistics {
+	case SectionDropStatistics:
 		return "drop statistics"
 	}
 	return "unknown"
 }
 
+// We expose this error type to the outside world. All trace parsing errors
+// should be of this type.
 type TraceParseError struct {
 	Section    Section
 	LineNumber int
@@ -68,6 +71,9 @@ func newTraceParseError(section Section, lineNumber int, suberror error) error {
 	}
 }
 
+// When parsing a trace, most errors happen within a specific section, as
+// opposed to with the trace as a whole. Use a sectionError for these errors,
+// since they keep extra state that's useful for debugging.
 type sectionError struct {
 	Message    string
 	LineNumber int
@@ -106,6 +112,10 @@ func newSectionError(message string, lineNumber int) error {
 	return newSectionErrorWithSuberror(message, lineNumber, nil)
 }
 
+// Convert a slice of lines from a trace file into a slice of sections,
+// where each section is a slice of lines in that section, and a slice
+// of line numbers recording the first line number of each section,
+// which is useful for generating helpful error messages.
 func linesToSections(lines [][]byte) (sections [][]string, lineNumbers []int) {
 	currentSection := []string{}
 	lineNumbers = append(lineNumbers, 0)
@@ -120,6 +130,13 @@ func linesToSections(lines [][]byte) (sections [][]string, lineNumbers []int) {
 	}
 	if len(currentSection) > 0 {
 		sections = append(sections, currentSection)
+	} else {
+		// Remove the last line number, since there isn't a corresponding
+		// section for it.
+		lineNumbers = lineNumbers[:len(lineNumbers) - 1]
+	}
+	if len(sections) != len(lineNumbers) {
+		panic(fmt.Sprintf("Bug: number of sections and line numbers don't match! %d %d", len(sections), len(lineNumbers)))
 	}
 	return
 }
@@ -161,6 +178,12 @@ func words(str string) []string {
 	return strings.Split(str, " ")
 }
 
+// Parse the introductory section, which has the following format:
+//
+// [file format version]
+// [bismark-passive build id]
+// [bismark ID] [timestamp at process creation in microseconds] [sequence number] [current timestamp in seconds]
+// [(optional) total packets received by pcap] [(optional) total packets dropped by pcap] [(optional) total packets dropped by interface]
 func parseSectionIntro(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
 		return newSectionError("missing first line", 0)
@@ -187,13 +210,14 @@ func parseSectionIntro(sectionLines []string, trace *Trace) error {
 		return newSectionError("missing third line", 2)
 	}
 	thirdLineWords := words(sectionLines[2])
-	if len(thirdLineWords) < 1 {
+	switch len(thirdLineWords) {
+	case 0:
 		return newSectionError("missing node id", 2)
-	} else if len(thirdLineWords) < 2 {
+	case 1:
 		return newSectionError("missing process start time", 2)
-	} else if len(thirdLineWords) < 3 {
+	case 2:
 		return newSectionError("missing sequence number", 2)
-	} else if len(thirdLineWords) < 4 {
+	case 3:
 		return newSectionError("missing trace creation timestamp", 2)
 	}
 	trace.NodeId = &thirdLineWords[0]
@@ -218,11 +242,12 @@ func parseSectionIntro(sectionLines []string, trace *Trace) error {
 		return nil
 	}
 	fourthLineWords := words(sectionLines[3])
-	if len(fourthLineWords) < 1 {
+	switch len(fourthLineWords) {
+	case 0:
 		return newSectionError("missing PCAP received", 3)
-	} else if len(fourthLineWords) < 2 {
+	case 1:
 		return newSectionError("missing PCAP dropped", 3)
-	} else if len(fourthLineWords) < 3 {
+	case 2:
 		return newSectionError("missing interface dropped", 3)
 	}
 	if pcapReceived, err := atou32(fourthLineWords[0]); err != nil {
@@ -244,11 +269,20 @@ func parseSectionIntro(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the whitelist section, which has this format:
+//
+// [whitelisted domain (only when sequence number is 0)]
+// [whitelisted domain (only when sequence number is 0)]
+// ...
+// [whitelisted domain (only when sequence number is 0)]
 func parseSectionWhitelist(sectionLines []string, trace *Trace) error {
 	trace.Whitelist = sectionLines
 	return nil
 }
 
+// Parse the anonymization section, which has this format:
+//
+// [hash of anonymization key, or "UNANONYMIZED" if not anonymized]
 func parseSectionAnonymization(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
 		return newSectionError("missing anonymization signature section", 0)
@@ -259,14 +293,22 @@ func parseSectionAnonymization(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the packet series section, which has the format:
+//
+// [timestamp of first packet in microseconds] [packets dropped]
+// [microseconds offset from previous packet] [packet size bytes] [flow id]
+// [microseconds offset from previous packet] [packet size bytes] [flow id]
+// ...
+// [microseconds offset from previous packet] [packet size bytes] [flow id]
 func parseSectionPacketSeries(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
 		return newSectionError("missing first line", 0)
 	}
 	firstLineWords := words(sectionLines[0])
-	if len(firstLineWords) < 1 {
+	switch len(firstLineWords) {
+	case 0:
 		return newSectionError("missing base timestamp", 0)
-	} else if len(firstLineWords) < 2 {
+	case 1:
 		return newSectionError("missing dropped packets count", 0)
 	}
 	currentTimestampMicroseconds, err := atoi64(firstLineWords[0])
@@ -282,11 +324,12 @@ func parseSectionPacketSeries(sectionLines []string, trace *Trace) error {
 	trace.PacketSeries = make([]*PacketSeriesEntry, len(sectionLines[1:]))
 	for index, line := range sectionLines[1:] {
 		entryWords := words(line)
-		if len(entryWords) < 1 {
+		switch len(entryWords) {
+		case 0:
 			return newSectionError("missing offset in packet entry", 1+index)
-		} else if len(entryWords) < 2 {
+		case 1:
 			return newSectionError("missing size in packet entry", 1+index)
-		} else if len(entryWords) < 3 {
+		case 2:
 			return newSectionError("missing flow id in packet entry", 1+index)
 		}
 		if offset, err := atoi32(entryWords[0]); err != nil {
@@ -313,18 +356,26 @@ func parseSectionPacketSeries(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the flow table, which has the format:
+//
+// [baseline timestamp in seconds] [num elements in flow table] [total expired flows] [total dropped flows]
+// [flow id] [anonymized source?] [(hashed) source IP address] [anonymized destination?] [(hashed) destination IP address] [transport protocol] [source port] [destination port]
+// [flow id] [anonymized source?] [(hashed) source IP address] [anonymized destination?] [(hashed) destination IP address] [transport protocol] [source port] [destination port]
+// ...
+// [flow id] [anonymized source?] [(hashed) source IP address] [anonymized destination?] [(hashed) destination IP address] [transport protocol] [source port] [destination port]
 func parseSectionFlowTable(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
 		return newSectionError("missing first line", 0)
 	}
 	firstLineWords := words(sectionLines[0])
-	if len(firstLineWords) < 1 {
+	switch len(firstLineWords) {
+	case 0:
 		return newSectionError("missing base timestamp", 0)
-	} else if len(firstLineWords) < 2 {
+	case 1:
 		return newSectionError("missing table size", 0)
-	} else if len(firstLineWords) < 3 {
+	case 2:
 		return newSectionError("missing expiration time", 0)
-	} else if len(firstLineWords) < 4 {
+	case 3:
 		return newSectionError("missing dropped entries count", 0)
 	}
 	if baseline, err := atoi64(firstLineWords[0]); err != nil {
@@ -351,21 +402,22 @@ func parseSectionFlowTable(sectionLines []string, trace *Trace) error {
 	trace.FlowTableEntry = make([]*FlowTableEntry, len(sectionLines[1:]))
 	for index, line := range sectionLines[1:] {
 		entryWords := words(line)
-		if len(entryWords) < 1 {
+		switch len(entryWords) {
+		case 0:
 			return newSectionError("missing flow id from flow table entry", 1+index)
-		} else if len(entryWords) < 2 {
+		case 1:
 			return newSectionError("missing source IP anonymized from flow table entry", 1+index)
-		} else if len(entryWords) < 3 {
+		case 2:
 			return newSectionError("missing source IP from flow table entry", 1+index)
-		} else if len(entryWords) < 4 {
+		case 3:
 			return newSectionError("missing destination IP anonymized from flow table entry", 1+index)
-		} else if len(entryWords) < 5 {
+		case 4:
 			return newSectionError("missing destination IP from flow table entry", 1+index)
-		} else if len(entryWords) < 6 {
+		case 5:
 			return newSectionError("missing transport protocol from flow table entry", 1+index)
-		} else if len(entryWords) < 7 {
+		case 6:
 			return newSectionError("missing source port from flow table entry", 1+index)
-		} else if len(entryWords) < 8 {
+		case 7:
 			return newSectionError("missing destination port from flow table entry", 1+index)
 		}
 		newEntry := FlowTableEntry{}
@@ -406,6 +458,12 @@ func parseSectionFlowTable(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the DNS A table section, which has the format:
+// [total dropped A records] [total dropped CNAME records]
+// [packet id] [MAC id] [anonymized?] [(hashed) domain name for A record] [(hashed) ip address for A record] [ttl]
+// [packet id] [MAC id] [anonymized?] [(hashed) domain name for A record] [(hashed) ip address for A record] [ttl]
+// ...
+// [packet id] [MAC id] [anonymized?] [(hashed) domain name for A record] [(hashed) ip address for A record] [ttl]
 func parseSectionDnsTableA(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
 		return newSectionError("missing first line", 0)
@@ -430,17 +488,18 @@ func parseSectionDnsTableA(sectionLines []string, trace *Trace) error {
 	trace.ARecord = make([]*DnsARecord, len(sectionLines[1:]))
 	for index, line := range sectionLines[1:] {
 		entryWords := words(line)
-		if len(entryWords) < 1 {
+		switch len(entryWords) {
+		case 0:
 			return newSectionError("missing packet id in record", 1+index)
-		} else if len(entryWords) < 2 {
+		case 1:
 			return newSectionError("missing address id in record", 1+index)
-		} else if len(entryWords) < 3 {
+		case 2:
 			return newSectionError("missing anonymized in record", 1+index)
-		} else if len(entryWords) < 4 {
+		case 3:
 			return newSectionError("missing domain in record", 1+index)
-		} else if len(entryWords) < 5 {
+		case 4:
 			return newSectionError("missing IP address in record", 1+index)
-		} else if len(entryWords) < 6 {
+		case 5:
 			return newSectionError("missing TTL id in record", 1+index)
 		}
 		newEntry := DnsARecord{}
@@ -471,21 +530,28 @@ func parseSectionDnsTableA(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the DNS CNAME section, which has the format:
+//
+// [packet id] [MAC id] [domain anonymized?] [(hashed) domain name for CNAME record] [(optional) cname anonymized?] [(hashed) cname for CNAME record] [ttl]
+// [packet id] [MAC id] [domain anonymized?] [(hashed) domain name for CNAME record] [(optional) cname anonymized?] [(hashed) cname for CNAME record] [ttl]
+// ...
+// [packet id] [MAC id] [domain anonymized?] [(hashed) domain name for CNAME record] [(optional) cname anonymized?] [(hashed) cname for CNAME record] [ttl]
 func parseSectionDnsTableCname(sectionLines []string, trace *Trace) error {
 	trace.CnameRecord = make([]*DnsCnameRecord, len(sectionLines))
 	for index, line := range sectionLines {
 		entryWords := words(line)
-		if len(entryWords) < 1 {
+		switch len(entryWords) {
+		case 0:
 			return newSectionError("missing packet id in record", index)
-		} else if len(entryWords) < 2 {
+		case 1:
 			return newSectionError("missing address id in record", index)
-		} else if len(entryWords) < 3 {
+		case 2:
 			return newSectionError("missing domain anonymized in record", index)
-		} else if len(entryWords) < 4 {
+		case 3:
 			return newSectionError("missing domain in record", index)
-		} else if len(entryWords) < 5 {
+		case 4:
 			return newSectionError("missing CNAME anonymized (or CNAME) in record", index)
-		} else if len(entryWords) < 6 {
+		case 5:
 			return newSectionError("missing CNAME (or TTL id) in record", index)
 		}
 		newEntry := DnsCnameRecord{}
@@ -527,6 +593,13 @@ func parseSectionDnsTableCname(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the address table section, which has the format:
+//
+// [address id of first address in list] [total size of address table]
+// [MAC address with lower 24 bits hashed] [hashed IP address]
+// [MAC address with lower 24 bits hashed] [hashed IP address]
+// ...
+// [MAC address with lower 24 bits hashed] [hashed IP address]
 func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 	if len(sectionLines) < 1 {
 		return newSectionError("missing first line", 0)
@@ -564,6 +637,12 @@ func parseSectionAddressTable(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the drop statistics section, which has the format:
+//
+// [size of dropped packet] [number of packets dropped]
+// [size of dropped packet] [number of packets dropped]
+// ...
+// [size of dropped packet] [number of packets dropped]
 func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
 	// Compensate for a bug where some traces don't leave space for
 	// a dropped packets section and skip to an HTTP URLs section.
@@ -598,6 +677,8 @@ func parseSectionDropStatistics(sectionLines []string, trace *Trace) error {
 	return nil
 }
 
+// Parse the sections of a trace file. Some sections are mandatory, while others
+// are optional.
 func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, error) {
 	type sectionParser func([]string, *Trace) error
 
@@ -664,6 +745,8 @@ func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, erro
 	return trace, nil
 }
 
+// Read an uncompressed bismark-passive trace file and parse it into a Trace.
+// This can parse all versions of the file format.
 func ParseTrace(source io.Reader) (*Trace, error) {
 	contents, err := ioutil.ReadAll(source)
 	if err != nil {
