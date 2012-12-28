@@ -1,0 +1,110 @@
+package passive
+
+import (
+	"bytes"
+	"expvar"
+	"github.com/jmhodges/levigo"
+	"log"
+)
+
+type LevelDbRecord struct {
+	Key []byte
+	Value []byte
+}
+
+type LevelDbRecordSlice []*LevelDbRecord
+
+func (p LevelDbRecordSlice) Len() int { return len(p) }
+func (p LevelDbRecordSlice) Less(i, j int) bool { return bytes.Compare(p[i].Key, p[j].Key) < 0 }
+func (p LevelDbRecordSlice) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+
+type Transformer interface {
+	Do(inputChan, outputChan chan *LevelDbRecord)
+}
+
+type TransformerFunc func(inputChan, outputChan chan *LevelDbRecord)
+
+func (transformer TransformerFunc) Do(inputChan, outputChan chan *LevelDbRecord) {
+	transformer(inputChan, outputChan)
+}
+
+func validateTableName(table []byte) {
+	if len(table) == 0 {
+		log.Fatalf("Invalid table name")
+	}
+	if bytes.Contains(table, []byte(":")) {
+		log.Fatalf("Table name %q cannot contain ':'", table)
+	}
+}
+
+func readRecords(db *levigo.DB, table []byte, recordsChan chan *LevelDbRecord) {
+	defer close(recordsChan)
+
+	validateTableName(table)
+	tablePrefix := bytes.Join([][]byte{table, []byte(":")}, []byte{})
+
+	recordsRead := expvar.NewInt("RecordsRead")
+
+	readOpts := levigo.NewReadOptions()
+	defer readOpts.Close()
+	it := db.NewIterator(readOpts)
+	for it.Seek(tablePrefix); it.Valid(); it.Next() {
+		if !bytes.HasPrefix(it.Key(), tablePrefix) {
+			break
+		}
+		recordsChan <- &LevelDbRecord{Key: it.Key(), Value: it.Value()}
+		recordsRead.Add(1)
+	}
+	if err := it.GetError(); err != nil {
+		log.Fatalf("Error iterating through database: %v", err)
+	}
+}
+
+func writeRecords(db *levigo.DB, recordsChan chan *LevelDbRecord) {
+	recordsWritten := expvar.NewInt("RecordsWritten")
+
+	writeOpts := levigo.NewWriteOptions()
+	defer writeOpts.Close()
+	for record := range recordsChan {
+		if err := db.Put(writeOpts, record.Key, record.Value); err != nil {
+			log.Fatalf("Error writing to channel")
+		}
+		recordsWritten.Add(1)
+	}
+}
+
+func RunTransformer(transformer Transformer, inputDbPath, inputTable, outputDbPath string) {
+	inputOpts := levigo.NewOptions()
+	inputOpts.SetMaxOpenFiles(128)
+	defer inputOpts.Close()
+	inputDb, err := levigo.Open(inputDbPath, inputOpts)
+	if err != nil {
+		log.Fatalf("Error opening leveldb database %v: %v", inputDbPath, err)
+	}
+	defer inputDb.Close()
+
+	var outputDb *levigo.DB
+	if outputDbPath == inputDbPath {
+		outputDb = inputDb
+	} else {
+		outputOpts := levigo.NewOptions()
+		outputOpts.SetMaxOpenFiles(128)
+		outputOpts.SetCreateIfMissing(true)
+		outputOpts.SetErrorIfExists(true)
+		defer outputOpts.Close()
+		outputDb, err = levigo.Open(outputDbPath, outputOpts)
+		if err != nil {
+			log.Fatalf("Error opening leveldb database %v: %v", outputDbPath, err)
+		}
+	}
+	defer outputDb.Close()
+
+	inputChan := make(chan *LevelDbRecord)
+	outputChan := make(chan *LevelDbRecord)
+
+	go readRecords(inputDb, []byte(inputTable), inputChan)
+	go writeRecords(outputDb, outputChan)
+
+	transformer.Do(inputChan, outputChan)
+	close(outputChan)
+}

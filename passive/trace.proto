@@ -81,7 +81,3 @@ message Trace {
 
   repeated DroppedPacketsEntry dropped_packets_entry = 26;
 }
-
-message Traces {
-	repeated Trace trace = 1;
-}

@@ -3,7 +3,6 @@ package passive
 import (
 	"code.google.com/p/goprotobuf/proto"
 	"fmt"
-	"strings"
 	"testing"
 )
 
@@ -753,11 +752,7 @@ c43dc79106a8 1336ec0318683863
 
 
 `
-	reader := strings.NewReader(fileContents)
-	if reader == nil {
-		t.Fatal("Could not create reader")
-	}
-	trace, err := ParseTrace(reader)
+	trace, err := parseTrace([]byte(fileContents))
 	if err != nil {
 		t.Fatalf("Failed to parse trace: %s", err)
 	}
@@ -871,17 +866,13 @@ c43dc79106a8 1336ec0318683863
 }
 
 func checkForParseError(t *testing.T, fileContents string, expectedLineNumber int) {
-	reader := strings.NewReader(fileContents)
-	if reader == nil {
-		t.Fatal("Could not create reader")
-	}
-	_, err := ParseTrace(reader)
+	_, err := parseTrace([]byte(fileContents))
 	if err == nil {
 		t.Fatalf("Trace should have failed to parse")
 	}
 	e, ok := err.(*TraceParseError)
 	if !ok {
-		t.Fatalf("ParseTrace should have failed with a TraceParseError. Instad failed with: %s", e)
+		t.Fatalf("parseTrace should have failed with a TraceParseError. Instad failed with: %s", e)
 	}
 	if expectedLineNumber >= 0 && e.LineNumber != expectedLineNumber {
 		t.Fatalf("Expected TraceParseError on line %d. Got line %d instead", expectedLineNumber, e.LineNumber)

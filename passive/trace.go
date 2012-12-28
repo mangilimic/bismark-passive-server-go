@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"strconv"
 	"strings"
 )
@@ -747,11 +745,7 @@ func makeTraceFromSections(sections [][]string, lineNumbers []int) (*Trace, erro
 
 // Read an uncompressed bismark-passive trace file and parse it into a Trace.
 // This can parse all versions of the file format.
-func ParseTrace(source io.Reader) (*Trace, error) {
-	contents, err := ioutil.ReadAll(source)
-	if err != nil {
-		return nil, err
-	}
+func parseTrace(contents []byte) (*Trace, error) {
 	lines := bytes.Split(contents, []byte{'\n'})
 	sections, lineNumbers := linesToSections(lines)
 	trace, err := makeTraceFromSections(sections, lineNumbers)
