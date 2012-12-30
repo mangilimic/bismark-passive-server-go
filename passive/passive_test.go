@@ -2,6 +2,7 @@ package passive_test
 
 import (
 	. "bismark/passive"
+	"bytes"
 	"code.google.com/p/goprotobuf/proto"
 	"encoding/binary"
 	"fmt"
@@ -37,17 +38,34 @@ func createLevelDbRecord(key string, value proto.Message) *LevelDbRecord {
 	}
 }
 
-func sortChan(inputChan chan *LevelDbRecord) (chan *LevelDbRecord) {
+func runTransform(transform func(inputChan, outputChan chan *LevelDbRecord), inputRecords []*LevelDbRecord, inputTable string) []*LevelDbRecord {
+	inputChan := make(chan *LevelDbRecord, 100)
 	outputChan := make(chan *LevelDbRecord, 100)
-	records := make([]*LevelDbRecord, 0)
-	for record := range inputChan {
-		records = append(records, record)
+	for _, record := range inputRecords {
+		if !bytes.HasPrefix(record.Key, bytes.Join([][]byte{[]byte(inputTable), []byte(":")}, []byte{})) {
+			continue
+		}
+		inputChan <- record
 	}
-	sort.Sort(LevelDbRecordSlice(records))
-	for _, record := range records {
-		outputChan <- record
-	}
+	close(inputChan)
+	transform(inputChan, outputChan)
 	close(outputChan)
-	return outputChan
+	outputRecords := []*LevelDbRecord{}
+	for record := range outputChan {
+		outputRecords = append(outputRecords, record)
+	}
+	sort.Sort(LevelDbRecordSlice(outputRecords))
+	return outputRecords
 }
 
+func mergeOutputs(first, second []*LevelDbRecord) []*LevelDbRecord {
+	merged := []*LevelDbRecord{}
+	for _, record := range first {
+		merged = append(merged, record)
+	}
+	for _, record := range second {
+		merged = append(merged, record)
+	}
+	sort.Sort(LevelDbRecordSlice(merged))
+	return merged
+}

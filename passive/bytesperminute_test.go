@@ -14,21 +14,10 @@ func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
 	}
 }
 
-func runBytesPerMinute(inputRecords []*LevelDbRecord) {
-	inputChan := make(chan *LevelDbRecord, 100)
-	mapChan := make(chan *LevelDbRecord, 100)
-	outputChan := make(chan *LevelDbRecord, 100)
-
-	for _, record := range inputRecords {
-		inputChan <- record
-	}
-	close(inputChan)
-	BytesPerMinuteMapper(inputChan, mapChan)
-	close(mapChan)
-	BytesPerMinuteReducer(sortChan(mapChan), outputChan)
-	close(outputChan)
-
-	for entry := range sortChan(outputChan) {
+func runBytesPerMinute(inputRecords []*LevelDbRecord, inputTable string) {
+	mapperOutput := runTransform(BytesPerMinuteMapper, inputRecords, inputTable)
+	reducerOutput := runTransform(BytesPerMinuteReducer, mapperOutput, "bytes_per_minute_mapped")
+	for _, entry := range reducerOutput {
 		fmt.Printf("%s: %v\n", entry.Key, decodeInt64(entry.Value))
 	}
 }
@@ -46,7 +35,7 @@ func ExampleBytesPerMinute_simple() {
 		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
 		createLevelDbRecord("table:node0:anon0:session0:seq1", trace2),
 	}
-	runBytesPerMinute(records)
+	runBytesPerMinute(records, "table")
 
 	// Output:
 	// bytes_per_minute:node0:00000000000000000000: 200
@@ -65,7 +54,7 @@ func ExampleBytesPerMinute_twoMinutes() {
 		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
 		createLevelDbRecord("table:node0:anon0:session0:seq1", trace2),
 	}
-	runBytesPerMinute(records)
+	runBytesPerMinute(records, "table")
 
 	// Output:
 	// bytes_per_minute:node0:00000000000000000000: 120
@@ -81,7 +70,7 @@ func ExampleBytesPerMinute_multipleSessions() {
 		createLevelDbRecord("table:node0:anon0:session1:seq0", trace1),
 		createLevelDbRecord("table:node0:anon1:session0:seq0", trace1),
 	}
-	runBytesPerMinute(records)
+	runBytesPerMinute(records, "table")
 
 	// Output:
 	// bytes_per_minute:node0:00000000000000000000: 60
@@ -95,7 +84,7 @@ func ExampleBytesPerMinute_multipleNodes() {
 		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
 		createLevelDbRecord("table:node1:anon0:session0:seq0", trace1),
 	}
-	runBytesPerMinute(records)
+	runBytesPerMinute(records, "table")
 
 	// Output:
 	// bytes_per_minute:node0:00000000000000000000: 20
