@@ -31,7 +31,6 @@ func runBytesPerDevice(inputRecords []*LevelDbRecord, inputTable string) {
 
 func ExampleBytesPerDevice_single() {
 	trace := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -53,7 +52,7 @@ func ExampleBytesPerDevice_single() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -63,7 +62,6 @@ func ExampleBytesPerDevice_single() {
 
 func ExampleBytesPerDevice_missingMac() {
 	trace := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -86,7 +84,7 @@ func ExampleBytesPerDevice_missingMac() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -96,7 +94,6 @@ func ExampleBytesPerDevice_missingMac() {
 
 func ExampleBytesPerDevice_missingFlow() {
 	trace := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -106,7 +103,7 @@ func ExampleBytesPerDevice_missingFlow() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -118,7 +115,6 @@ func ExampleBytesPerDevice_missingFlow() {
 
 func ExampleBytesPerDevice_roundToMinute() {
 	trace := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1e6 * 61),  // 61 seconds past midnight on January 1, 1970
@@ -141,7 +137,7 @@ func ExampleBytesPerDevice_roundToMinute() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -151,7 +147,6 @@ func ExampleBytesPerDevice_roundToMinute() {
 
 func ExampleBytesPerDevice_multipleMinutes() {
 	trace := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1e6 * 60),  // 1 minute past midnight on January 1, 1970
@@ -179,7 +174,7 @@ func ExampleBytesPerDevice_multipleMinutes() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -190,7 +185,6 @@ func ExampleBytesPerDevice_multipleMinutes() {
 
 func ExampleBytesPerDevice_multipleFlows() {
 	trace := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -223,7 +217,7 @@ func ExampleBytesPerDevice_multipleFlows() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -233,7 +227,6 @@ func ExampleBytesPerDevice_multipleFlows() {
 
 func ExampleBytesPerDevice_twoDevicesPerFlow() {
 	trace := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -270,7 +263,7 @@ func ExampleBytesPerDevice_twoDevicesPerFlow() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -281,7 +274,6 @@ func ExampleBytesPerDevice_twoDevicesPerFlow() {
 
 func ExampleBytesPerDevice_maskFlows() {
 	trace1 := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -308,7 +300,6 @@ func ExampleBytesPerDevice_maskFlows() {
 		},
 	}
 	trace2 := &Trace{
-		SequenceNumber: proto.Int32(1),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -325,7 +316,6 @@ func ExampleBytesPerDevice_maskFlows() {
 		},
 	}
 	trace3 := &Trace{
-		SequenceNumber: proto.Int32(2),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -335,9 +325,9 @@ func ExampleBytesPerDevice_maskFlows() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace2),
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace3),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace1),
+		createLevelDbRecord("table:node0:anon0:session0:1", trace2),
+		createLevelDbRecord("table:node0:anon0:session0:2", trace3),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -348,7 +338,6 @@ func ExampleBytesPerDevice_maskFlows() {
 
 func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 	trace1 := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -371,7 +360,6 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 		},
 	}
 	trace2 := &Trace{
-		SequenceNumber: proto.Int32(1),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -387,8 +375,8 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace2),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace1),
+		createLevelDbRecord("table:node0:anon0:session0:1", trace2),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -398,7 +386,6 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 
 func ExampleBytesPerDevice_maskMac() {
 	trace1 := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -421,7 +408,6 @@ func ExampleBytesPerDevice_maskMac() {
 		},
 	}
 	trace2 := &Trace{
-		SequenceNumber: proto.Int32(1),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -444,8 +430,8 @@ func ExampleBytesPerDevice_maskMac() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace2),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace1),
+		createLevelDbRecord("table:node0:anon0:session0:1", trace2),
 	}
 	runBytesPerDevice(records, "table")
 
@@ -456,7 +442,6 @@ func ExampleBytesPerDevice_maskMac() {
 
 func ExampleBytesPerDevice_multipleNodes() {
 	trace1 := &Trace{
-		SequenceNumber: proto.Int32(0),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -478,7 +463,6 @@ func ExampleBytesPerDevice_multipleNodes() {
 		},
 	}
 	trace2 := &Trace{
-		SequenceNumber: proto.Int32(2),
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
@@ -500,8 +484,8 @@ func ExampleBytesPerDevice_multipleNodes() {
 		},
 	}
 	records := []*LevelDbRecord{
-		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
-		createLevelDbRecord("table:node1:anon0:session0:seq0", trace2),
+		createLevelDbRecord("table:node0:anon0:session0:0", trace1),
+		createLevelDbRecord("table:node1:anon0:session0:2", trace2),
 	}
 	runBytesPerDevice(records, "table")
 

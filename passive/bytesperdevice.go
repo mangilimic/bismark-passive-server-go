@@ -12,6 +12,12 @@ type FlowTimestamp struct {
 	timestamp int64
 }
 
+type UnionTag []byte
+
+var UnionFirst = UnionTag("1")
+var UnionSecond = UnionTag("2")
+var UnionThird = UnionTag("3")
+
 // Input: A table mapping
 // node_id:anonymization_context:session_id:sequence_number to traces
 // Output: Three tables:
@@ -33,17 +39,12 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
 		}
 
-		sequenceNumberBytes, err := encodeLexicographicReverseInt32(*trace.SequenceNumber)
-		if err != nil {
-			log.Fatalf("Error encoding sequence number: %v", err)
-		}
-
 		for _, addressTableEntry := range trace.AddressTableEntry {
 			if addressTableEntry.IpAddress == nil || addressTableEntry.MacAddress == nil {
 				continue
 			}
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*addressTableEntry.IpAddress), sequenceNumberBytes, []byte("2")),
+				Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*addressTableEntry.IpAddress), key[4], UnionFirst),
 				Value: []byte(*addressTableEntry.MacAddress),
 			}
 		}
@@ -54,13 +55,13 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 			}
 			if flowTableEntry.SourceIp != nil {
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.SourceIp), sequenceNumberBytes, []byte("1")),
+					Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.SourceIp), key[4], UnionSecond),
 					Value: encodeInt64(int64(*flowTableEntry.FlowId)),
 				}
 			}
 			if flowTableEntry.DestinationIp != nil {
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.DestinationIp), sequenceNumberBytes, []byte("1")),
+					Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.DestinationIp), key[4], UnionSecond),
 					Value: encodeInt64(int64(*flowTableEntry.FlowId)),
 				}
 			}
@@ -88,7 +89,7 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 				continue
 			}
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("flow_to_bytes_and_mac", key[1], key[2], key[3], flowIdBytes, sequenceNumberBytes, []byte("1"), timestampBytes),
+				Key: makeKey("flow_to_bytes_and_mac", key[1], key[2], key[3], flowIdBytes, key[4], UnionSecond, timestampBytes),
 				Value: encodeInt64(size),
 			}
 		}
@@ -96,18 +97,22 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 }
 
 func JoinMacAndFlowId(inputChan, outputChan chan *LevelDbRecord) {
-	var nonce int64
 	var currentIpKey []byte
 	var currentDestKey []byte
-	var currentFlowIds [][]byte
+	var currentMac []byte
+	var nonce Nonce
 	for record := range inputChan {
+		// The key format is
+		// input_table:node_id:anonymization_context:session_id:ip:sequence_number:join_tag
+		// where join_tag is 1 if the value is a MAC address and 2 if the value
+		// is a flow ID.
 		key := parseKey(record.Key)
 		if len(key) != 7 {
 			log.Fatalf("Invalid length for key %q", record.Key)
 		}
 
-		ipKey := bytes.Join(key[1:5], []byte(":"))
-		destKey := bytes.Join(key[1:4], []byte(":"))
+		ipKey := bytes.Join(key[1:5], []byte(":"))  // node_id:anonymization_context:session_id:ip
+		destKey := bytes.Join(key[1:4], []byte(":"))  // node_id:anonymization_context:session_id
 
 		if currentIpKey == nil {
 			currentIpKey = ipKey
@@ -117,35 +122,28 @@ func JoinMacAndFlowId(inputChan, outputChan chan *LevelDbRecord) {
 		}
 
 		if !bytes.Equal(currentIpKey, ipKey) {
-			currentFlowIds = [][]byte{}
 			currentIpKey = ipKey
 			currentDestKey = destKey
+			currentMac = nil  // Keys switched to a new IP so the current MAC doesn't correspond with that IP.
 		}
 
-		if bytes.Equal(key[6], []byte("1")) {
-			flowId, err := decodeInt64(record.Value)
-			if err != nil {
-				log.Fatalf("Error decoding flow id: %v", err)
-			}
-			encodedFlowId, err := encodeLexicographicInt32(int32(flowId))
-			if err != nil {
-				log.Fatalf("Error encoding flow id: %v", err)
-			}
-			currentFlowIds = append(currentFlowIds, bytes.Join([][]byte{encodedFlowId, key[5]}, []byte(":")))
-		} else if bytes.Equal(key[6], []byte("2")) {
-			currentMac := record.Value
-			for _, flowIdAndSequenceNumber := range currentFlowIds {
-				encodedNonce, err := encodeLexicographicInt64(nonce)
+		if bytes.Equal(key[6], UnionFirst) {
+			currentMac = record.Value
+		} else if bytes.Equal(key[6], UnionSecond) {
+			if currentMac != nil {
+				flowId, err := decodeInt64(record.Value)
 				if err != nil {
-					log.Fatalf("Error encoding nonce: %v", err)
+					log.Fatalf("Error decoding flow id: %v", err)
+				}
+				encodedFlowId, err := encodeLexicographicInt32(int32(flowId))
+				if err != nil {
+					log.Fatalf("Error encoding flow id: %v", err)
 				}
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("flow_to_bytes_and_mac", currentDestKey, flowIdAndSequenceNumber, []byte("2"), encodedNonce),
+					Key: makeKey("flow_to_bytes_and_mac", currentDestKey, encodedFlowId, key[5], UnionFirst, nonce.Next()),
 					Value: currentMac,
 				}
-				nonce += 1
 			}
-			currentFlowIds = [][]byte{}
 		} else {
 			log.Fatalf("Invalid tag: %v", key[6])
 		}
@@ -153,57 +151,56 @@ func JoinMacAndFlowId(inputChan, outputChan chan *LevelDbRecord) {
 }
 
 func JoinMacAndTimestamp(inputChan, outputChan chan *LevelDbRecord) {
-	var nonce int64
+	var nonce Nonce
 	var currentFlowKey []byte
-	var currentTimestamps [][]byte
-	var currentSizes [][]byte
 	var currentSequenceNumberKey []byte
+	var currentMacs [][]byte
 	for record := range inputChan {
+		// The key format is
+		// input_table:node_id:anonymization_context:session_id:flow_id:sequence_number:join_tag:timestamp
+		// where join_tag is 1 if the value is a MAC address and 2 if the value
+		// is a byte count. Timestamp is only present if join_tag is 2.
 		key := parseKey(record.Key)
 		if len(key) != 7 && len(key) != 8 {
 			log.Fatalf("Invalid length for key %q", record.Key)
 		}
 
-		flowKey := bytes.Join(key[1:5], []byte(":"))
+		flowKey := bytes.Join(key[1:5], []byte(":"))  // node_id:anonymization_context:session_id:flow_id
 		if currentFlowKey == nil {
 			currentFlowKey = flowKey
 		}
 		if !bytes.Equal(currentFlowKey, flowKey) {
-			currentTimestamps = [][]byte{}
-			currentSizes = [][]byte{}
 			currentFlowKey = flowKey
+			currentMacs = [][]byte{}  // Key switched to a new flow so we need to discover MACs for the new flow.
 		}
 
-		if bytes.Equal(key[6], []byte("1")) {
-			if currentSequenceNumberKey != nil {
-				currentTimestamps = [][]byte{}
-				currentSizes = [][]byte{}
-				currentSequenceNumberKey = nil
-			}
-			currentTimestamps = append(currentTimestamps, key[7])
-			currentSizes = append(currentSizes, record.Value)
-		} else if bytes.Equal(key[6], []byte("2")) {
-			sequenceNumberKey := bytes.Join(key[1:6], []byte(":"))
+		if bytes.Equal(key[6], UnionFirst) {
+			sequenceNumberKey := bytes.Join(key[1:6], []byte(":"))  // node_id:anonymization_context:session_id:flow_id:sequence_number
 			if currentSequenceNumberKey == nil {
 				currentSequenceNumberKey = sequenceNumberKey
 			}
-			if !bytes.Equal(sequenceNumberKey, currentSequenceNumberKey) {
-				currentTimestamps = [][]byte{}
-				currentSizes = [][]byte{}
-				currentSequenceNumberKey = nil
+			if bytes.Equal(currentSequenceNumberKey, sequenceNumberKey) {
+				// Two MACs are mapped to the same flow in the same trace.  We
+				// assume they correspond to each end of the flow and traffic
+				// should be attributed to both devices. (e.g., two devices on
+				// the LAN talking to each other.)
+				currentMacs = append(currentMacs, record.Value)
+			} else {
+				// If two MACs are mapped to the same flow in different traces
+				// then we assume they correspond to different flows sharing the
+				// same flow ID (i.e., a new flow), so we only attribute traffic
+				// to the last seen MAC.
+				currentSequenceNumberKey = sequenceNumberKey
+				currentMacs = [][]byte{record.Value}
 			}
+		} else if bytes.Equal(key[6], UnionSecond) {
 			currentNode := key[1]
-			currentMac := record.Value
-			for idx, timestamp := range currentTimestamps {
-				encodedNonce, err := encodeLexicographicInt64(nonce)
-				if err != nil {
-					log.Fatalf("Error encoding nonce: %v", err)
-				}
+			currentTimestamp := key[7]
+			for _, currentMac := range currentMacs {
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("bytes_per_device_with_nonce", currentNode, currentMac, timestamp, encodedNonce),
-					Value: currentSizes[idx],
+					Key: makeKey("bytes_per_device_with_nonce", currentNode, currentMac, currentTimestamp, nonce.Next()),
+					Value: record.Value,
 				}
-				nonce++
 			}
 		} else {
 			log.Fatalf("Invalid tag: %v", key[7])
