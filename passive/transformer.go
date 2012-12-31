@@ -37,13 +37,20 @@ func validateTableName(table []byte) {
 	}
 }
 
+var recordsRead, bytesRead, recordsWritten, bytesWritten *expvar.Int
+
+func init() {
+	recordsRead = expvar.NewInt("RecordsRead")
+	recordsWritten = expvar.NewInt("RecordsWritten")
+	bytesRead = expvar.NewInt("BytesRead")
+	bytesWritten = expvar.NewInt("BytesWritten")
+}
+
 func readRecords(db *levigo.DB, table []byte, recordsChan chan *LevelDbRecord) {
 	defer close(recordsChan)
 
 	validateTableName(table)
 	tablePrefix := bytes.Join([][]byte{table, []byte(":")}, []byte{})
-
-	recordsRead := expvar.NewInt("RecordsRead")
 
 	readOpts := levigo.NewReadOptions()
 	defer readOpts.Close()
@@ -54,6 +61,7 @@ func readRecords(db *levigo.DB, table []byte, recordsChan chan *LevelDbRecord) {
 		}
 		recordsChan <- &LevelDbRecord{Key: it.Key(), Value: it.Value()}
 		recordsRead.Add(1)
+		bytesRead.Add(int64(len(it.Key()) + len(it.Value())))
 	}
 	if err := it.GetError(); err != nil {
 		log.Fatalf("Error iterating through database: %v", err)
@@ -61,8 +69,6 @@ func readRecords(db *levigo.DB, table []byte, recordsChan chan *LevelDbRecord) {
 }
 
 func writeRecords(db *levigo.DB, recordsChan chan *LevelDbRecord) {
-	recordsWritten := expvar.NewInt("RecordsWritten")
-
 	writeOpts := levigo.NewWriteOptions()
 	defer writeOpts.Close()
 	for record := range recordsChan {
@@ -70,6 +76,7 @@ func writeRecords(db *levigo.DB, recordsChan chan *LevelDbRecord) {
 			log.Fatalf("Error writing to channel")
 		}
 		recordsWritten.Add(1)
+		bytesWritten.Add(int64(len(record.Key) + len(record.Value)))
 	}
 }
 
@@ -96,8 +103,8 @@ func RunTransformer(transformer Transformer, inputDbPath, inputTable, outputDbPa
 		if err != nil {
 			log.Fatalf("Error opening leveldb database %v: %v", outputDbPath, err)
 		}
+		defer outputDb.Close()
 	}
-	defer outputDb.Close()
 
 	inputChan := make(chan *LevelDbRecord)
 	outputChan := make(chan *LevelDbRecord)

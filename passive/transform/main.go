@@ -14,6 +14,10 @@ func main() {
 	transformers := map[string]passive.Transformer{
 		"bytes_per_minute_map": passive.TransformerFunc(passive.BytesPerMinuteMapper),
 		"bytes_per_minute_reduce": passive.TransformerFunc(passive.BytesPerMinuteReducer),
+		"bytes_per_device_map_from_trace": passive.TransformerFunc(passive.MapFromTrace),
+		"bytes_per_device_join_mac_and_flow_id": passive.TransformerFunc(passive.JoinMacAndFlowId),
+		"bytes_per_device_join_mac_and_timestamp": passive.TransformerFunc(passive.JoinMacAndTimestamp),
+		"bytes_per_device_reduce": passive.TransformerFunc(passive.BytesPerDeviceReduce),
 	}
 
 	flag.Usage = func() {
@@ -27,7 +31,7 @@ func main() {
 	}
 	flag.Parse()
 
-	if flag.NArg() != 5 {
+	if flag.NArg() != 4 {
 		flag.Usage()
 		return
 	}

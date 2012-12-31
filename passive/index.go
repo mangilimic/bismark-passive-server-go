@@ -15,11 +15,11 @@ import (
 	"compress/gzip"
 )
 
-var bytesRead, bytesWritten, sessionsAdded, tarsScanned, tarsToIndex, tarsIndexed, tarsFailed, tracesIndexed, tracesFailed *expvar.Int
+var importerBytesRead, importerBytesWritten, sessionsAdded, tarsScanned, tarsToIndex, tarsIndexed, tarsFailed, tracesIndexed, tracesFailed *expvar.Int
 
 func init() {
-	bytesRead = expvar.NewInt("BytesRead")
-	bytesWritten = expvar.NewInt("BytesWritten")
+	importerBytesRead = expvar.NewInt("ImporterBytesRead")
+	importerBytesWritten = expvar.NewInt("ImporterBytesWritten")
 	sessionsAdded = expvar.NewInt("SessionsAdded")
 	tarsScanned = expvar.NewInt("TarsScanned")
 	tarsToIndex = expvar.NewInt("TarsToIndex")
@@ -99,7 +99,7 @@ func readFromTarballs(tarFilesToIndex []string, traceChan chan *Trace) {
 			handle.Close()
 			continue
 		}
-		bytesRead.Add(fileinfo.Size())
+		importerBytesRead.Add(fileinfo.Size())
 		tr := tar.NewReader(handle)
 		for {
 			header, err := tr.Next()
@@ -185,7 +185,7 @@ func IndexTraces(tarsPath string, indexPath string) error {
 		if err != nil {
 			return fmt.Errorf("Error encoding protocol buffer: %v", err)
 		}
-		bytesWritten.Add(int64(len(value)))
+		importerBytesWritten.Add(int64(len(value)))
 		if err := db.Put(writeOpts, key, value); err != nil {
 			return fmt.Errorf("Error putting trace: %v", err)
 		}
