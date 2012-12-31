@@ -225,7 +225,7 @@ func ExampleBytesPerDevice_multipleFlows() {
 	// bytes_per_device:node0:AABBCCDDEEFF:00000000000000000000: 30
 }
 
-func ExampleBytesPerDevice_twoDevicesPerFlow() {
+func ExampleBytesPerDevice_twoMacsPerFlow() {
 	trace := &Trace{
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
@@ -334,6 +334,62 @@ func ExampleBytesPerDevice_maskFlows() {
 	// Output:
 	// bytes_per_device:node0:AABBCCDDEEFF:00000000000000000000: 12
 	// bytes_per_device:node0:FFEEDDCCBBAA:00000000000000000000: 30
+}
+
+func ExampleBytesPerDevice_maskMacAndFlows() {
+	trace1 := &Trace{
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size: proto.Int32(30),
+				FlowId: proto.Int32(4),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId: proto.Int32(4),
+				SourceIp: proto.String("1.2.3.4"),
+				DestinationIp: proto.String("4.4.4.4"),
+			},
+		},
+		AddressTableEntry: []*AddressTableEntry {
+			&AddressTableEntry{
+				IpAddress: proto.String("1.2.3.4"),
+				MacAddress: proto.String("AABBCCDDEEFF"),
+			},
+		},
+	}
+	trace2 := &Trace{
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size: proto.Int32(20),
+				FlowId: proto.Int32(4),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId: proto.Int32(4),
+				SourceIp: proto.String("1.2.3.4"),
+				DestinationIp: proto.String("4.4.4.4"),
+			},
+		},
+		AddressTableEntry: []*AddressTableEntry {
+			&AddressTableEntry{
+				IpAddress: proto.String("1.2.3.4"),
+				MacAddress: proto.String("FFEEDDCCBBAA"),
+			},
+		},
+	}
+	records := []*LevelDbRecord{
+		createLevelDbRecord("table:node0:anon0:session0:0", trace1),
+		createLevelDbRecord("table:node0:anon0:session0:1", trace2),
+	}
+	runBytesPerDevice(records, "table")
+
+	// Output:
+	// bytes_per_device:node0:AABBCCDDEEFF:00000000000000000000: 30
+	// bytes_per_device:node0:FFEEDDCCBBAA:00000000000000000000: 20
 }
 
 func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
