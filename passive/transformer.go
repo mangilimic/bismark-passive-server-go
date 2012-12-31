@@ -97,7 +97,6 @@ func RunTransformer(transformer Transformer, inputDbPath, inputTable, outputDbPa
 		outputOpts := levigo.NewOptions()
 		outputOpts.SetMaxOpenFiles(128)
 		outputOpts.SetCreateIfMissing(true)
-		outputOpts.SetErrorIfExists(true)
 		defer outputOpts.Close()
 		outputDb, err = levigo.Open(outputDbPath, outputOpts)
 		if err != nil {
