@@ -9,18 +9,16 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 	"path/filepath"
 	"archive/tar"
 	"compress/gzip"
 )
 
-var importerBytesRead, importerBytesWritten, sessionsAdded, tarsScanned, tarsToIndex, tarsIndexed, tarsFailed, tracesIndexed, tracesFailed *expvar.Int
+var importerBytesRead, importerBytesWritten, tarsScanned, tarsToIndex, tarsIndexed, tarsFailed, tracesIndexed, tracesFailed *expvar.Int
 
 func init() {
 	importerBytesRead = expvar.NewInt("ImporterBytesRead")
 	importerBytesWritten = expvar.NewInt("ImporterBytesWritten")
-	sessionsAdded = expvar.NewInt("SessionsAdded")
 	tarsScanned = expvar.NewInt("TarsScanned")
 	tarsToIndex = expvar.NewInt("TarsToIndex")
 	tarsIndexed = expvar.NewInt("TarsIndexed")
@@ -43,25 +41,11 @@ func traceKey(trace *Trace) []byte {
 	if trace.SequenceNumber != nil {
 		sequenceNumber = fmt.Sprintf("%.10d", *trace.SequenceNumber)
 	}
-	return []byte(fmt.Sprintf("trace_data:%s:%s:%s:%s", nodeId, anonymizationContext, sessionId, sequenceNumber))
-}
-
-func sessionKey(trace *Trace) string {
-	var nodeId, anonymizationContext, sessionId string
-	if trace.NodeId != nil {
-		nodeId = *trace.NodeId
-	}
-	if trace.AnonymizationSignature != nil {
-		anonymizationContext = *trace.AnonymizationSignature
-	}
-	if trace.ProcessStartTimeMicroseconds != nil {
-		sessionId = fmt.Sprintf("%.20d", *trace.ProcessStartTimeMicroseconds)
-	}
-	return fmt.Sprintf("session_data:%s:%s:%s", nodeId, anonymizationContext, sessionId)
+	return []byte(fmt.Sprintf("traces:%s:%s:%s:%s", nodeId, anonymizationContext, sessionId, sequenceNumber))
 }
 
 func tarballKey(tarFile string) []byte {
-	return []byte(fmt.Sprintf("tarball_data:%s", filepath.Base(tarFile)))
+	return []byte(fmt.Sprintf("tarballs:%s", filepath.Base(tarFile)))
 }
 
 func traceParseWorker(contentsChan chan []byte, traces chan *Trace, done chan bool) {
@@ -166,9 +150,6 @@ func IndexTraces(tarsPath string, indexPath string) error {
 		} else if value != nil {
 			continue
 		}
-		if !strings.HasPrefix(filepath.Base(tarFile), "OWC43DC79DE0F7") {
-			continue
-		}
 
 		tarFilesToIndex = append(tarFilesToIndex, tarFile)
 		tarsToIndex.Add(int64(1))
@@ -178,7 +159,6 @@ func IndexTraces(tarsPath string, indexPath string) error {
 	traces := make(chan *Trace)
 	go readFromTarballs(tarFilesToIndex, traces)
 
-	sessions := make(map[string]bool)
 	for trace := range traces {
 		key := traceKey(trace)
 		value, err := proto.Marshal(trace)
@@ -190,14 +170,6 @@ func IndexTraces(tarsPath string, indexPath string) error {
 			return fmt.Errorf("Error putting trace: %v", err)
 		}
 		tracesIndexed.Add(1)
-		sessions[sessionKey(trace)] = true
-	}
-
-	for key, _ := range sessions {
-		if err := db.Put(writeOpts, []byte(key), []byte("")); err != nil {
-			return fmt.Errorf("Error writing session: %v", err)
-		}
-		sessionsAdded.Add(1)
 	}
 
 	for _, tarFile := range tarFilesToIndex {
