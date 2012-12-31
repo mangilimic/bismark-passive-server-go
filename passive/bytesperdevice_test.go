@@ -60,6 +60,61 @@ func ExampleBytesPerDevice_single() {
 	// bytes_per_device:node0:AABBCCDDEEFF:00000000000000000000: 10
 }
 
+func ExampleBytesPerDevice_missingSequenceNumber() {
+	trace1 := &Trace{
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size: proto.Int32(10),
+				FlowId: proto.Int32(4),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId: proto.Int32(4),
+				SourceIp: proto.String("1.2.3.4"),
+			},
+		},
+		AddressTableEntry: []*AddressTableEntry {
+			&AddressTableEntry{
+				IpAddress: proto.String("1.2.3.4"),
+				MacAddress: proto.String("AABBCCDDEEFF"),
+			},
+		},
+	}
+	trace2 := &Trace{
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size: proto.Int32(13),
+				FlowId: proto.Int32(4),
+			},
+		},
+	}
+	trace3 := &Trace{
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size: proto.Int32(20),
+				FlowId: proto.Int32(4),
+			},
+		},
+	}
+	records := []*LevelDbRecord{
+		createLevelDbRecord("table:node0:anon0:session0:0", trace1),
+		createLevelDbRecord("table:node0:anon0:session0:1", trace2),
+		createLevelDbRecord("table:node0:anon0:session0:3", trace3),
+		createLevelDbRecord("table:node1:anon1:session2:0", trace1),
+		createLevelDbRecord("table:node1:anon1:session2:1", trace2),
+		createLevelDbRecord("table:node1:anon1:session2:2", trace3),
+	}
+	runBytesPerDevice(records, "table")
+
+	// Output:
+	// bytes_per_device:node0:AABBCCDDEEFF:00000000000000000000: 23
+	// bytes_per_device:node1:AABBCCDDEEFF:00000000000000000000: 43
+}
+
 func ExampleBytesPerDevice_missingMac() {
 	trace := &Trace{
 		PacketSeries: []*PacketSeriesEntry{
@@ -541,7 +596,7 @@ func ExampleBytesPerDevice_multipleNodes() {
 	}
 	records := []*LevelDbRecord{
 		createLevelDbRecord("table:node0:anon0:session0:0", trace1),
-		createLevelDbRecord("table:node1:anon0:session0:2", trace2),
+		createLevelDbRecord("table:node1:anon0:session0:0", trace2),
 	}
 	runBytesPerDevice(records, "table")
 

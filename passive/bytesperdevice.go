@@ -28,11 +28,28 @@ var UnionThird = UnionTag("3")
 // table. Again, we can emit multiple records per trace.
 // 3. A mapping from flow IDs and rounded timestamps to a byte count.
 func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
+	var currentSession []byte
+	var expectedSequenceNumber int32
 	for record := range inputChan {
 		key := parseKey(record.Key)  // input_table:node_id:anonymization_context:session_id:sequence_number
 		if len(key) != 5 {
 			log.Fatalf("Invalid length for key %q", record.Key)
 		}
+
+		session := bytes.Join(key[1:4], []byte(":"))
+		if !bytes.Equal(currentSession, session) {
+			currentSession = session
+			expectedSequenceNumber = 0
+		}
+		sequenceNumber, err := decodeLexicographicInt32(key[4])
+		if err != nil {
+			log.Fatalf("Error decoding sequence number: %v", err)
+		}
+		if sequenceNumber != expectedSequenceNumber {
+			log.Printf("Expected sequence number %v; got %v instead", expectedSequenceNumber, sequenceNumber)
+			continue
+		}
+		expectedSequenceNumber++
 
 		trace := Trace{}
 		if err := proto.Unmarshal(record.Value, &trace); err != nil {

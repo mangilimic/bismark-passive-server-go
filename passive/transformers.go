@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strconv"
 )
 
 func encodeInt64(num int64) []byte {
@@ -33,6 +34,15 @@ func encodeLexicographicInt32(num int32) ([]byte, error) {
 		return nil, fmt.Errorf("Lexicographic encoding only works for non-negative numbers. Cannot encode %v.", num)
 	}
 	return []byte(fmt.Sprintf("%.10d", num)), nil
+}
+
+func decodeLexicographicInt64(encoded []byte) (int64, error) {
+	return strconv.ParseInt(string(encoded), 10, 64)
+}
+
+func decodeLexicographicInt32(encoded []byte) (int32, error) {
+	num, err := strconv.ParseInt(string(encoded), 10, 32)
+	return int32(num), err
 }
 
 func encodeLexicographicReverseInt64(num int64) ([]byte, error) {
