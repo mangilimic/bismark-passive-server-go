@@ -23,14 +23,14 @@ func decodeInt64(encoded []byte) (int64, error) {
 
 func encodeLexicographicInt64(num int64) ([]byte, error) {
 	if num < 0 {
-		return nil, fmt.Errorf("Lexicographic encoding only works for non-negative numbers")
+		return nil, fmt.Errorf("Lexicographic encoding only works for non-negative numbers. Cannot encode %v.", num)
 	}
 	return []byte(fmt.Sprintf("%.20d", num)), nil
 }
 
 func encodeLexicographicInt32(num int32) ([]byte, error) {
 	if num < 0 {
-		return nil, fmt.Errorf("Lexicographic encoding only works for non-negative numbers")
+		return nil, fmt.Errorf("Lexicographic encoding only works for non-negative numbers. Cannot encode %v.", num)
 	}
 	return []byte(fmt.Sprintf("%.10d", num)), nil
 }
