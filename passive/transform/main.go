@@ -12,6 +12,7 @@ import (
 
 func main() {
 	transformers := map[string]passive.Transformer{
+		"availability_map": passive.TransformerFunc(passive.AvailabilityMapper),
 		"bytes_per_minute_map": passive.TransformerFunc(passive.BytesPerMinuteMapper),
 		"bytes_per_minute_reduce": passive.TransformerFunc(passive.BytesPerMinuteReducer),
 		"bytes_per_device_map_from_trace": passive.TransformerFunc(passive.MapFromTrace),

@@ -7,12 +7,41 @@ import (
 	"github.com/sburnett/cube"
 	"log"
 	"os"
-	"strings"
 )
 
-func main() {
-	pipelines := map[string][]passive.PipelineStage{
-		"bytesperminute": []passive.PipelineStage{
+func getPipelineStages(pipelineName string) []passive.PipelineStage {
+	switch pipelineName {
+	case "availability":
+		flagset := flag.NewFlagSet("availability", flag.ExitOnError)
+		jsonOutput := flagset.String("json_output", "/dev/null", "Write availiability in JSON format to this file.")
+		flagset.Parse(flag.Args()[2:])
+
+		jsonHandle, err := os.Create(*jsonOutput)
+		if err != nil {
+			log.Fatalf("Error opening JSON output: %v", err)
+		}
+		return []passive.PipelineStage{
+			passive.PipelineStage{
+				Transformer: passive.TransformerFunc(passive.AvailabilityMapper),
+				InputDb: "index.leveldb",
+				InputTable: "traces",
+				OutputDb: "availability.leveldb",
+			},
+			passive.PipelineStage{
+				Transformer: passive.TransformerFunc(passive.AvailabilityReducer),
+				InputDb: "availability.leveldb",
+				InputTable: "availability_with_nonce",
+				OutputDb: "availability.leveldb",
+			},
+			passive.PipelineStage{
+				Transformer: passive.AvailabilityJson{jsonHandle},
+				InputDb: "availability.leveldb",
+				InputTable: "availability",
+				OutputDb: "availability.leveldb",
+			},
+		}
+	case "bytesperminute":
+		return []passive.PipelineStage{
 			passive.PipelineStage{
 				Transformer: passive.TransformerFunc(passive.BytesPerMinuteMapper),
 				InputDb: "index.leveldb",
@@ -25,8 +54,9 @@ func main() {
 				InputTable: "bytes_per_minute_mapped",
 				OutputDb: "bytes_per_minute.leveldb",
 			},
-		},
-		"bytesperdevice": []passive.PipelineStage{
+		}
+	case "bytesperdevice":
+		return []passive.PipelineStage{
 			passive.PipelineStage{
 				Transformer: passive.TransformerFunc(passive.MapFromTrace),
 				InputDb: "index.leveldb",
@@ -51,22 +81,23 @@ func main() {
 				InputTable: "bytes_per_device_with_nonce",
 				OutputDb: "bytes_per_device.leveldb",
 			},
-		},
+		}
+	default:
+		flag.Usage()
+		log.Fatalf("Invalid pipeline.")
 	}
+	return nil
+}
 
+func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s <pipeline> <db root>:\n", os.Args[0])
-		pipelineNames := []string{}
-		for name, _ := range pipelines {
-			pipelineNames = append(pipelineNames, name)
-		}
-		fmt.Fprintf(os.Stderr, "Available pipelines: %v\n", strings.Join(pipelineNames, ", "))
 		flag.PrintDefaults()
 	}
 	skipStages := flag.Int("skip_stages", 0, "Skip this many stages at the beginning of the pipeline.")
 	flag.Parse()
 
-	if flag.NArg() != 2 {
+	if flag.NArg() < 2 {
 		flag.Usage()
 		return
 	}
@@ -75,10 +106,6 @@ func main() {
 
 	go cube.Run(fmt.Sprintf("bismark_passive_pipeline_%s", pipelineName))
 
-	stages, ok := pipelines[pipelineName]
-	if !ok {
-		flag.Usage()
-		log.Fatalf("Invalid pipeline.")
-	}
+	stages := getPipelineStages(pipelineName)
 	passive.RunPipeline(dbRoot, stages, *skipStages)
 }
