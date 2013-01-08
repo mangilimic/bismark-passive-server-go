@@ -17,7 +17,7 @@ func runBytesPerDevice(inputRecords []*LevelDbRecord, inputTable string) {
 	//for _, entry := range joinMacAndFlowIdOutput {
 	//	fmt.Printf("%s: %v / %s\n", entry.Key, decodeInt64(entry.Value), entry.Value)
 	//}
-	joinMacAndTimestampOutput := runTransform(JoinMacAndTimestamp, mergeOutputs(mapFromTraceOutput, joinMacAndFlowIdOutput) , "flow_to_bytes_and_mac")
+	joinMacAndTimestampOutput := runTransform(JoinMacAndTimestamp, mergeOutputs(mapFromTraceOutput, joinMacAndFlowIdOutput), "flow_to_bytes_and_mac")
 	//fmt.Printf("joinMacAndTimestampOutput:\n")
 	//for _, entry := range joinMacAndTimestampOutput {
 	//	fmt.Printf("%s: %v / %s\n", entry.Key, decodeInt64(entry.Value), entry.Value)
@@ -34,19 +34,19 @@ func ExampleBytesPerDevice_single() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
+				FlowId:   proto.Int32(4),
 				SourceIp: proto.String("1.2.3.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -65,19 +65,19 @@ func ExampleBytesPerDevice_missingSequenceNumber() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
+				FlowId:   proto.Int32(4),
 				SourceIp: proto.String("1.2.3.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -86,8 +86,8 @@ func ExampleBytesPerDevice_missingSequenceNumber() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(13),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(13),
+				FlowId:                proto.Int32(4),
 			},
 		},
 	}
@@ -95,8 +95,8 @@ func ExampleBytesPerDevice_missingSequenceNumber() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(20),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(20),
+				FlowId:                proto.Int32(4),
 			},
 		},
 	}
@@ -120,20 +120,20 @@ func ExampleBytesPerDevice_missingMac() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -152,8 +152,8 @@ func ExampleBytesPerDevice_missingFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 	}
@@ -172,21 +172,21 @@ func ExampleBytesPerDevice_roundToMinute() {
 	trace := &Trace{
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
-				TimestampMicroseconds: proto.Int64(1e6 * 61),  // 61 seconds past midnight on January 1, 1970
-				Size: proto.Int32(20),
-				FlowId: proto.Int32(4),
+				TimestampMicroseconds: proto.Int64(1e6 * 61), // 61 seconds past midnight on January 1, 1970
+				Size:                  proto.Int32(20),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -204,26 +204,26 @@ func ExampleBytesPerDevice_multipleMinutes() {
 	trace := &Trace{
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
-				TimestampMicroseconds: proto.Int64(1e6 * 60),  // 1 minute past midnight on January 1, 1970
-				Size: proto.Int32(20),
-				FlowId: proto.Int32(4),
+				TimestampMicroseconds: proto.Int64(1e6 * 60), // 1 minute past midnight on January 1, 1970
+				Size:                  proto.Int32(20),
+				FlowId:                proto.Int32(4),
 			},
 			&PacketSeriesEntry{
-				TimestampMicroseconds: proto.Int64(1e6 * 120),  // 2 minutes past midnight on January 1, 1970
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				TimestampMicroseconds: proto.Int64(1e6 * 120), // 2 minutes past midnight on January 1, 1970
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -243,30 +243,30 @@ func ExampleBytesPerDevice_multipleFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(20),
-				FlowId: proto.Int32(5),
+				Size:                  proto.Int32(20),
+				FlowId:                proto.Int32(5),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 			&FlowTableEntry{
-				FlowId: proto.Int32(5),
-				SourceIp: proto.String("4.3.2.1"),
+				FlowId:        proto.Int32(5),
+				SourceIp:      proto.String("4.3.2.1"),
 				DestinationIp: proto.String("1.2.3.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -285,34 +285,34 @@ func ExampleBytesPerDevice_twoMacsPerFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(20),
-				FlowId: proto.Int32(5),
+				Size:                  proto.Int32(20),
+				FlowId:                proto.Int32(5),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 			&FlowTableEntry{
-				FlowId: proto.Int32(5),
-				SourceIp: proto.String("4.3.2.1"),
+				FlowId:        proto.Int32(5),
+				SourceIp:      proto.String("4.3.2.1"),
 				DestinationIp: proto.String("1.2.3.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 			&AddressTableEntry{
-				IpAddress: proto.String("4.3.2.1"),
+				IpAddress:  proto.String("4.3.2.1"),
 				MacAddress: proto.String("FFEEDDCCBBAA"),
 			},
 		},
@@ -332,24 +332,24 @@ func ExampleBytesPerDevice_maskFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(30),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(30),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.1.1.1"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.1.1.1"),
 				DestinationIp: proto.String("4.4.4.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 			&AddressTableEntry{
-				IpAddress: proto.String("1.1.1.1"),
+				IpAddress:  proto.String("1.1.1.1"),
 				MacAddress: proto.String("FFEEDDCCBBAA"),
 			},
 		},
@@ -358,14 +358,14 @@ func ExampleBytesPerDevice_maskFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 		},
@@ -374,8 +374,8 @@ func ExampleBytesPerDevice_maskFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(2),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(2),
+				FlowId:                proto.Int32(4),
 			},
 		},
 	}
@@ -396,20 +396,20 @@ func ExampleBytesPerDevice_maskMacAndFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(30),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(30),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.4.4.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -418,20 +418,20 @@ func ExampleBytesPerDevice_maskMacAndFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(20),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(20),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.4.4.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("FFEEDDCCBBAA"),
 			},
 		},
@@ -452,20 +452,20 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -474,13 +474,13 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(12),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(12),
+				FlowId:                proto.Int32(4),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("FFEEDDCCBBAA"),
 			},
 		},
@@ -500,20 +500,20 @@ func ExampleBytesPerDevice_maskMac() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -522,20 +522,20 @@ func ExampleBytesPerDevice_maskMac() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(12),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(12),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
-				SourceIp: proto.String("1.2.3.4"),
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("1.2.3.4"),
 				DestinationIp: proto.String("4.3.2.1"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("FFEEDDCCBBAA"),
 			},
 		},
@@ -556,19 +556,19 @@ func ExampleBytesPerDevice_multipleNodes() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(10),
-				FlowId: proto.Int32(4),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(4),
+				FlowId:   proto.Int32(4),
 				SourceIp: proto.String("1.2.3.4"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("1.2.3.4"),
+				IpAddress:  proto.String("1.2.3.4"),
 				MacAddress: proto.String("AABBCCDDEEFF"),
 			},
 		},
@@ -577,19 +577,19 @@ func ExampleBytesPerDevice_multipleNodes() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size: proto.Int32(20),
-				FlowId: proto.Int32(3),
+				Size:                  proto.Int32(20),
+				FlowId:                proto.Int32(3),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
 			&FlowTableEntry{
-				FlowId: proto.Int32(3),
+				FlowId:   proto.Int32(3),
 				SourceIp: proto.String("4.3.2.1"),
 			},
 		},
-		AddressTableEntry: []*AddressTableEntry {
+		AddressTableEntry: []*AddressTableEntry{
 			&AddressTableEntry{
-				IpAddress: proto.String("4.3.2.1"),
+				IpAddress:  proto.String("4.3.2.1"),
 				MacAddress: proto.String("FFEEDDCCBBAA"),
 			},
 		},

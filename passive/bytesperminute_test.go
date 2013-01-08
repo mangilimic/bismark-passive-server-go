@@ -10,7 +10,7 @@ import (
 func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
 	return &PacketSeriesEntry{
 		TimestampMicroseconds: proto.Int64(timestamp),
-		Size: proto.Int32(size),
+		Size:                  proto.Int32(size),
 	}
 }
 
@@ -44,12 +44,12 @@ func ExampleBytesPerMinute_simple() {
 func ExampleBytesPerMinute_twoMinutes() {
 	trace1 := &Trace{}
 	trace1.PacketSeries = make([]*PacketSeriesEntry, 2)
-	trace1.PacketSeries[0] = makePacketSeriesEntry(10 * int64(time.Second / time.Microsecond), 20)
-	trace1.PacketSeries[1] = makePacketSeriesEntry(30 * int64(time.Second / time.Microsecond), 40)
+	trace1.PacketSeries[0] = makePacketSeriesEntry(10*int64(time.Second/time.Microsecond), 20)
+	trace1.PacketSeries[1] = makePacketSeriesEntry(30*int64(time.Second/time.Microsecond), 40)
 	trace2 := &Trace{}
 	trace2.PacketSeries = make([]*PacketSeriesEntry, 2)
-	trace2.PacketSeries[0] = makePacketSeriesEntry(50 * int64(time.Second / time.Microsecond), 60)
-	trace2.PacketSeries[1] = makePacketSeriesEntry(70 * int64(time.Second / time.Microsecond), 80)
+	trace2.PacketSeries[0] = makePacketSeriesEntry(50*int64(time.Second/time.Microsecond), 60)
+	trace2.PacketSeries[1] = makePacketSeriesEntry(70*int64(time.Second/time.Microsecond), 80)
 	records := []*LevelDbRecord{
 		createLevelDbRecord("table:node0:anon0:session0:seq0", trace1),
 		createLevelDbRecord("table:node0:anon0:session0:seq1", trace2),

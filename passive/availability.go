@@ -1,13 +1,13 @@
 package passive
 
 import (
-	"fmt"
 	"bytes"
 	"code.google.com/p/goprotobuf/proto"
-	"time"
-	"log"
-	"io"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"time"
 )
 
 func AvailabilityMapper(inputChan, outputChan chan *LevelDbRecord) {
@@ -43,7 +43,7 @@ func AvailabilityMapper(inputChan, outputChan chan *LevelDbRecord) {
 						log.Fatalf("Error encoding interval ending timestamp %q: %v", *trace.TraceCreationTimestamp, err)
 					}
 					outputChan <- &LevelDbRecord{
-						Key: makeKey("availability_with_nonce", currentNode, nonce.Next()),
+						Key:   makeKey("availability_with_nonce", currentNode, nonce.Next()),
 						Value: bytes.Join([][]byte{currentBeginning, currentEnding}, []byte(",")),
 					}
 				}
@@ -88,7 +88,7 @@ func AvailabilityMapper(inputChan, outputChan chan *LevelDbRecord) {
 				log.Fatalf("Error encoding interval ending timestamp %q: %v", *trace.TraceCreationTimestamp, err)
 			}
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("availability_with_nonce", currentNode, nonce.Next()),
+				Key:   makeKey("availability_with_nonce", currentNode, nonce.Next()),
 				Value: bytes.Join([][]byte{currentBeginning, currentEnding}, []byte(",")),
 			}
 		}
@@ -114,7 +114,7 @@ func AvailabilityReducer(inputChan, outputChan chan *LevelDbRecord) {
 				log.Fatalf("Error marshaling JSON: %v", err)
 			}
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("availability", currentNode),
+				Key:   makeKey("availability", currentNode),
 				Value: value,
 			}
 			currentNode = nodeId
@@ -128,8 +128,8 @@ func AvailabilityReducer(inputChan, outputChan chan *LevelDbRecord) {
 		}
 		endTimestamp, err := decodeLexicographicInt64(startAndEnd[1])
 
-		availability[0] = append(availability[0], startTimestamp * 1000)
-		availability[1] = append(availability[1], endTimestamp * 1000)
+		availability[0] = append(availability[0], startTimestamp*1000)
+		availability[1] = append(availability[1], endTimestamp*1000)
 	}
 
 	if currentNode != nil {
@@ -138,7 +138,7 @@ func AvailabilityReducer(inputChan, outputChan chan *LevelDbRecord) {
 			log.Fatalf("Error marshaling JSON: %v", err)
 		}
 		outputChan <- &LevelDbRecord{
-			Key: makeKey("availability", currentNode),
+			Key:   makeKey("availability", currentNode),
 			Value: value,
 		}
 	}
@@ -164,5 +164,5 @@ func (writer AvailabilityJson) Do(inputChan, outputChan chan *LevelDbRecord) {
 		}
 		fmt.Fprintf(writer, "\"%s\": %s", nodeId, record.Value)
 	}
-	fmt.Fprintf(writer, "}, %d]", time.Now().Unix() * 1000)
+	fmt.Fprintf(writer, "}, %d]", time.Now().Unix()*1000)
 }

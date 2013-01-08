@@ -8,7 +8,7 @@ import (
 )
 
 type FlowTimestamp struct {
-	flowId int32
+	flowId    int32
 	timestamp int64
 }
 
@@ -31,7 +31,7 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 	var currentSession []byte
 	var expectedSequenceNumber int32
 	for record := range inputChan {
-		key := parseKey(record.Key)  // input_table:node_id:anonymization_context:session_id:sequence_number
+		key := parseKey(record.Key) // input_table:node_id:anonymization_context:session_id:sequence_number
 		if len(key) != 5 {
 			log.Fatalf("Invalid length for key %q", record.Key)
 		}
@@ -61,7 +61,7 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 				continue
 			}
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*addressTableEntry.IpAddress), key[4], UnionFirst),
+				Key:   makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*addressTableEntry.IpAddress), key[4], UnionFirst),
 				Value: []byte(*addressTableEntry.MacAddress),
 			}
 		}
@@ -72,13 +72,13 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 			}
 			if flowTableEntry.SourceIp != nil {
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.SourceIp), key[4], UnionSecond),
+					Key:   makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.SourceIp), key[4], UnionSecond),
 					Value: encodeInt64(int64(*flowTableEntry.FlowId)),
 				}
 			}
 			if flowTableEntry.DestinationIp != nil {
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.DestinationIp), key[4], UnionSecond),
+					Key:   makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.DestinationIp), key[4], UnionSecond),
 					Value: encodeInt64(int64(*flowTableEntry.FlowId)),
 				}
 			}
@@ -89,7 +89,7 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 			if packetSeriesEntry.FlowId == nil || packetSeriesEntry.TimestampMicroseconds == nil || packetSeriesEntry.Size == nil {
 				continue
 			}
-			timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds * 1000)
+			timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds*1000)
 			minuteTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), 0, 0, time.UTC)
 			flowTimestamp := FlowTimestamp{flowId: *packetSeriesEntry.FlowId, timestamp: minuteTimestamp.Unix()}
 			buckets[flowTimestamp] += int64(*packetSeriesEntry.Size)
@@ -106,7 +106,7 @@ func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
 				continue
 			}
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("flow_to_bytes_and_mac", key[1], key[2], key[3], flowIdBytes, key[4], UnionSecond, timestampBytes),
+				Key:   makeKey("flow_to_bytes_and_mac", key[1], key[2], key[3], flowIdBytes, key[4], UnionSecond, timestampBytes),
 				Value: encodeInt64(size),
 			}
 		}
@@ -128,8 +128,8 @@ func JoinMacAndFlowId(inputChan, outputChan chan *LevelDbRecord) {
 			log.Fatalf("Invalid length for key %q", record.Key)
 		}
 
-		ipKey := bytes.Join(key[1:5], []byte(":"))  // node_id:anonymization_context:session_id:ip
-		destKey := bytes.Join(key[1:4], []byte(":"))  // node_id:anonymization_context:session_id
+		ipKey := bytes.Join(key[1:5], []byte(":"))   // node_id:anonymization_context:session_id:ip
+		destKey := bytes.Join(key[1:4], []byte(":")) // node_id:anonymization_context:session_id
 
 		if currentIpKey == nil {
 			currentIpKey = ipKey
@@ -141,7 +141,7 @@ func JoinMacAndFlowId(inputChan, outputChan chan *LevelDbRecord) {
 		if !bytes.Equal(currentIpKey, ipKey) {
 			currentIpKey = ipKey
 			currentDestKey = destKey
-			currentMac = nil  // Keys switched to a new IP so the current MAC doesn't correspond with that IP.
+			currentMac = nil // Keys switched to a new IP so the current MAC doesn't correspond with that IP.
 		}
 
 		if bytes.Equal(key[6], UnionFirst) {
@@ -157,7 +157,7 @@ func JoinMacAndFlowId(inputChan, outputChan chan *LevelDbRecord) {
 					log.Fatalf("Error encoding flow id: %v", err)
 				}
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("flow_to_bytes_and_mac", currentDestKey, encodedFlowId, key[5], UnionFirst, nonce.Next()),
+					Key:   makeKey("flow_to_bytes_and_mac", currentDestKey, encodedFlowId, key[5], UnionFirst, nonce.Next()),
 					Value: currentMac,
 				}
 			}
@@ -182,17 +182,17 @@ func JoinMacAndTimestamp(inputChan, outputChan chan *LevelDbRecord) {
 			log.Fatalf("Invalid length for key %q", record.Key)
 		}
 
-		flowKey := bytes.Join(key[1:5], []byte(":"))  // node_id:anonymization_context:session_id:flow_id
+		flowKey := bytes.Join(key[1:5], []byte(":")) // node_id:anonymization_context:session_id:flow_id
 		if currentFlowKey == nil {
 			currentFlowKey = flowKey
 		}
 		if !bytes.Equal(currentFlowKey, flowKey) {
 			currentFlowKey = flowKey
-			currentMacs = [][]byte{}  // Key switched to a new flow so we need to discover MACs for the new flow.
+			currentMacs = [][]byte{} // Key switched to a new flow so we need to discover MACs for the new flow.
 		}
 
 		if bytes.Equal(key[6], UnionFirst) {
-			sequenceNumberKey := bytes.Join(key[1:6], []byte(":"))  // node_id:anonymization_context:session_id:flow_id:sequence_number
+			sequenceNumberKey := bytes.Join(key[1:6], []byte(":")) // node_id:anonymization_context:session_id:flow_id:sequence_number
 			if currentSequenceNumberKey == nil {
 				currentSequenceNumberKey = sequenceNumberKey
 			}
@@ -215,7 +215,7 @@ func JoinMacAndTimestamp(inputChan, outputChan chan *LevelDbRecord) {
 			currentTimestamp := key[7]
 			for _, currentMac := range currentMacs {
 				outputChan <- &LevelDbRecord{
-					Key: makeKey("bytes_per_device_with_nonce", currentNode, currentMac, currentTimestamp, nonce.Next()),
+					Key:   makeKey("bytes_per_device_with_nonce", currentNode, currentMac, currentTimestamp, nonce.Next()),
 					Value: record.Value,
 				}
 			}
@@ -242,7 +242,7 @@ func BytesPerDeviceReduce(inputChan, outputChan chan *LevelDbRecord) {
 
 		if !bytes.Equal(currentDestKey, destKey) {
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("bytes_per_device", currentDestKey),
+				Key:   makeKey("bytes_per_device", currentDestKey),
 				Value: encodeInt64(currentSize),
 			}
 			currentDestKey = destKey
@@ -258,7 +258,7 @@ func BytesPerDeviceReduce(inputChan, outputChan chan *LevelDbRecord) {
 
 	if currentDestKey != nil {
 		outputChan <- &LevelDbRecord{
-			Key: makeKey("bytes_per_device", currentDestKey),
+			Key:   makeKey("bytes_per_device", currentDestKey),
 			Value: encodeInt64(currentSize),
 		}
 	}

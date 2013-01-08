@@ -22,7 +22,7 @@ func BytesPerMinuteMapper(inputChan, outputChan chan *LevelDbRecord) {
 
 		buckets := make(map[int64]int64)
 		for _, packetSeriesEntry := range trace.PacketSeries {
-			timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds * 1000)
+			timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds*1000)
 			minuteTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), 0, 0, time.UTC)
 			buckets[minuteTimestamp.Unix()] += int64(*packetSeriesEntry.Size)
 		}
@@ -39,7 +39,7 @@ func BytesPerMinuteMapper(inputChan, outputChan chan *LevelDbRecord) {
 			}
 			nonce++
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("bytes_per_minute_mapped", key[1], timestampBytes, nonceBytes),
+				Key:   makeKey("bytes_per_minute_mapped", key[1], timestampBytes, nonceBytes),
 				Value: encodeInt64(size),
 			}
 		}
@@ -60,7 +60,7 @@ func BytesPerMinuteReducer(inputChan, outputChan chan *LevelDbRecord) {
 		}
 		if !bytes.Equal(key[1], currentNode) || !bytes.Equal(key[2], currentTimestamp) {
 			outputChan <- &LevelDbRecord{
-				Key: makeKey("bytes_per_minute", currentNode, currentTimestamp),
+				Key:   makeKey("bytes_per_minute", currentNode, currentTimestamp),
 				Value: encodeInt64(currentSize),
 			}
 			currentNode = key[1]
@@ -76,7 +76,7 @@ func BytesPerMinuteReducer(inputChan, outputChan chan *LevelDbRecord) {
 	}
 	if currentNode != nil && currentTimestamp != nil {
 		outputChan <- &LevelDbRecord{
-			Key: makeKey("bytes_per_minute", currentNode, currentTimestamp),
+			Key:   makeKey("bytes_per_minute", currentNode, currentTimestamp),
 			Value: encodeInt64(currentSize),
 		}
 	}

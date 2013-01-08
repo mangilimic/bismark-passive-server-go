@@ -8,9 +8,9 @@ import (
 
 type PipelineStage struct {
 	Transformer Transformer
-	InputDb string
-	InputTable string
-	OutputDb string
+	InputDb     string
+	InputTable  string
+	OutputDb    string
 }
 
 var stagesDone *expvar.Int

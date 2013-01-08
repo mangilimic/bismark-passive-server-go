@@ -33,7 +33,7 @@ func decodeInt64(encoded []byte) int64 {
 
 func createLevelDbRecord(key string, value proto.Message) *LevelDbRecord {
 	return &LevelDbRecord{
-		Key: []byte(key),
+		Key:   []byte(key),
 		Value: encodeProto(value),
 	}
 }

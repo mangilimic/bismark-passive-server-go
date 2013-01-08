@@ -8,15 +8,15 @@ import (
 )
 
 type LevelDbRecord struct {
-	Key []byte
+	Key   []byte
 	Value []byte
 }
 
 type LevelDbRecordSlice []*LevelDbRecord
 
-func (p LevelDbRecordSlice) Len() int { return len(p) }
+func (p LevelDbRecordSlice) Len() int           { return len(p) }
 func (p LevelDbRecordSlice) Less(i, j int) bool { return bytes.Compare(p[i].Key, p[j].Key) < 0 }
-func (p LevelDbRecordSlice) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p LevelDbRecordSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type Transformer interface {
 	Do(inputChan, outputChan chan *LevelDbRecord)

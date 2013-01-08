@@ -1,7 +1,10 @@
 package passive
 
 import (
+	"archive/tar"
+	"bytes"
 	"code.google.com/p/goprotobuf/proto"
+	"compress/gzip"
 	"expvar"
 	"fmt"
 	"github.com/jmhodges/levigo"
@@ -10,8 +13,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"archive/tar"
-	"compress/gzip"
 )
 
 var importerBytesRead, importerBytesWritten, tarsScanned, tarsToIndex, tarsIndexed, tarsFailed, tracesIndexed, tracesFailed *expvar.Int

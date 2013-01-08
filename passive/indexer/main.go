@@ -1,9 +1,9 @@
 package main
 
 import (
-	"bismark/passive"
 	"flag"
 	"fmt"
+	"github.com/sburnett/bismark-passive-server-go/passive"
 	"github.com/sburnett/cube"
 	"os"
 )
