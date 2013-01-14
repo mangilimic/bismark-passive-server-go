@@ -131,7 +131,7 @@ func linesToSections(lines [][]byte) (sections [][]string, lineNumbers []int) {
 	} else {
 		// Remove the last line number, since there isn't a corresponding
 		// section for it.
-		lineNumbers = lineNumbers[:len(lineNumbers) - 1]
+		lineNumbers = lineNumbers[:len(lineNumbers)-1]
 	}
 	if len(sections) != len(lineNumbers) {
 		panic(fmt.Sprintf("Bug: number of sections and line numbers don't match! %d %d", len(sections), len(lineNumbers)))
