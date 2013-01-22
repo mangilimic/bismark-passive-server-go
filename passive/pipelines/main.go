@@ -1,11 +1,11 @@
 package main
 
 import (
-	"github.com/sburnett/bismark-passive-server-go/passive"
-	"github.com/sburnett/transformer"
 	"flag"
 	"fmt"
+	"github.com/sburnett/bismark-passive-server-go/passive"
 	"github.com/sburnett/cube"
+	"github.com/sburnett/transformer"
 	"log"
 	"os"
 	"time"
@@ -34,11 +34,11 @@ func getPipelineStages(pipelineName string, workers int) []transformer.PipelineS
 	case "index":
 		return []transformer.PipelineStage{
 			transformer.PipelineStage{
-				Name: "ParseTraces",
+				Name:        "ParseTraces",
 				Transformer: transformer.MakeMultipleOutputsGroupDoFunc(passive.IndexTarballs, workers),
-				InputDbs: []string{"tarnames", "tarnames-indexed"},
-				OutputDbs: []string{"traces", "tarnames-indexed"},
-				OnlyKeys: true,
+				InputDbs:    []string{"tarnames", "tarnames-indexed"},
+				OutputDbs:   []string{"traces", "tarnames-indexed"},
+				OnlyKeys:    true,
 			},
 		}
 	//case "bytesperdevice":

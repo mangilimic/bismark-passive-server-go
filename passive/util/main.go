@@ -1,18 +1,18 @@
 package main
 
 import (
-	"expvar"
-	"strings"
-	"encoding/binary"
-	"github.com/jmhodges/levigo"
 	"bytes"
-	"github.com/sburnett/cube"
-	"fmt"
-	"text/tabwriter"
-	"os"
+	"encoding/binary"
+	"expvar"
 	"flag"
+	"fmt"
+	"github.com/jmhodges/levigo"
+	"github.com/sburnett/cube"
 	"log"
+	"os"
 	"sort"
+	"strings"
+	"text/tabwriter"
 )
 
 func lstables(dbPath string, db *levigo.DB) {
@@ -61,7 +61,7 @@ func lstables(dbPath string, db *levigo.DB) {
 	var totalRows int64
 	var totalBytes int64
 	for idx, table := range tables {
-		fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t\n", table[:len(table) - 1], tableRows[idx], tableBytes[idx], tableBytes[idx]/tableRows[idx])
+		fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t\n", table[:len(table)-1], tableRows[idx], tableBytes[idx], tableBytes[idx]/tableRows[idx])
 		totalRows += tableRows[idx]
 		totalBytes += tableBytes[idx]
 	}
@@ -164,10 +164,10 @@ func rmtables(dbPath string, db *levigo.DB) {
 }
 
 func main() {
-	operations := map[string]func(string, *levigo.DB) {
-		"lstables": lstables,
+	operations := map[string]func(string, *levigo.DB){
+		"lstables":   lstables,
 		"printtable": printtable,
-		"rmtables": rmtables,
+		"rmtables":   rmtables,
 	}
 
 	flag.Usage = func() {
