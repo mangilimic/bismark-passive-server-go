@@ -22,6 +22,15 @@ func getPipelineStages(pipelineName string, workers int) []transformer.PipelineS
 			log.Fatalf("Error opening JSON output: %v", err)
 		}
 		return passive.AvailabilityPipeline(jsonHandle, time.Now().Unix(), workers)
+	case "bytesperminute":
+		return passive.BytesPerMinutePipeline(workers)
+	case "filter":
+		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
+		nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
+		sessionStartDate := flagset.String("session_start_date", "20120301", "Retain only session starting after this date, in YYYYMMDD format.")
+		sessionEndDate := flagset.String("session_end_date", "20120401", "Retain only session starting before this date, in YYYYMMDD format.")
+		flagset.Parse(flag.Args()[2:])
+		return passive.FilterTracesPipeline(*nodeId, *sessionStartDate, *sessionEndDate, workers)
 	case "index":
 		return []transformer.PipelineStage{
 			transformer.PipelineStage{
@@ -32,21 +41,6 @@ func getPipelineStages(pipelineName string, workers int) []transformer.PipelineS
 				OnlyKeys: true,
 			},
 		}
-	//case "bytesperminute":
-	//	return []passive.PipelineStage{
-	//		passive.PipelineStage{
-	//			Transformer: passive.TransformerFunc(passive.BytesPerMinuteMapper),
-	//			InputDb: "index.leveldb",
-	//			InputTable: "trace_data",
-	//			OutputDb: "bytes_per_minute.leveldb",
-	//		},
-	//		passive.PipelineStage{
-	//			Transformer: passive.TransformerFunc(passive.BytesPerMinuteReducer),
-	//			InputDb: "bytes_per_minute.leveldb",
-	//			InputTable: "bytes_per_minute_mapped",
-	//			OutputDb: "bytes_per_minute.leveldb",
-	//		},
-	//	}
 	//case "bytesperdevice":
 	//	return []passive.PipelineStage{
 	//		passive.PipelineStage{
