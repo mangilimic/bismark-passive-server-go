@@ -28,6 +28,7 @@ func main() {
 
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
+	defer opts.Close()
 	db, err := levigo.Open(filepath.Join(indexPath, "tarnames"), opts)
 	if err != nil {
 		panic(fmt.Errorf("Error opening database: %v", err))
