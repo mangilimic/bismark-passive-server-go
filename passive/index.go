@@ -49,7 +49,13 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 		return false
 	}
 	tarBytesRead.Add(fileinfo.Size())
-	tr := tar.NewReader(handle)
+	unzippedHandle, err := gzip.NewReader(handle)
+	if err != nil {
+		log.Printf("Error unzipping tarball %s: %s\n", tarPath, err)
+		tarsFailed.Add(int64(1))
+		return false
+	}
+	tr := tar.NewReader(unzippedHandle)
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -59,22 +65,19 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 			log.Printf("Error indexing %v: %v", tarPath, err)
 			break
 		}
-		unzippedReader, err := gzip.NewReader(tr)
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+			continue
+		}
+		contents, err := ioutil.ReadAll(tr)
 		if err != nil {
 			tracesFailed.Add(1)
 			log.Printf("%s/%s: %v", tarPath, header.Name, err)
 			continue
 		}
-		contents, err := ioutil.ReadAll(unzippedReader)
-		if err != nil {
-			tracesFailed.Add(1)
-			log.Printf("%s/%s: %v", tarPath, header.Name, err)
-			continue
-		}
-
 		trace, err := parseTrace(contents)
 		if err != nil {
 			tracesFailed.Add(1)
+			log.Printf("%s:%s: %v", tarPath, header.Name, err)
 			continue
 		}
 		key := traceKey(trace)

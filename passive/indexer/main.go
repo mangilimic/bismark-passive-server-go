@@ -38,7 +38,7 @@ func main() {
 	defer writeOpts.Close()
 
 	log.Printf("Scanning tarballs.")
-	tarFiles, err := filepath.Glob(filepath.Join(tarsPath, "*.tar"))
+	tarFiles, err := filepath.Glob(filepath.Join(tarsPath, "*", "*", "*.tar.gz"))
 	if err != nil {
 		panic(fmt.Errorf("Error enumerating tarballs: ", err))
 	}
