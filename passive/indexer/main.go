@@ -28,6 +28,7 @@ func main() {
 
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
+	opts.SetBlockSize(4 * 1024 * 1024)
 	defer opts.Close()
 	db, err := levigo.Open(filepath.Join(indexPath, "tarnames"), opts)
 	if err != nil {
