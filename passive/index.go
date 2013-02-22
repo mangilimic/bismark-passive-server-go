@@ -14,12 +14,16 @@ import (
 	"os"
 )
 
-var tarBytesRead, tarsFailed, tracesFailed *expvar.Int
+var currentTar *expvar.String
+var tarBytesRead, tarsFailed, tarsIndexed, tracesFailed, tracesIndexed *expvar.Int
 
 func init() {
+	currentTar = expvar.NewString("CurrentTar")
 	tarBytesRead = expvar.NewInt("TarBytesRead")
 	tarsFailed = expvar.NewInt("TarsFailed")
+	tarsIndexed = expvar.NewInt("TarsIndexed")
 	tracesFailed = expvar.NewInt("TracesFailed")
+	tracesIndexed = expvar.NewInt("TracesIndexed")
 }
 
 func traceKey(trace *Trace) []byte {
@@ -35,6 +39,7 @@ func traceKey(trace *Trace) []byte {
 }
 
 func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bool {
+	currentTar.Set(tarPath)
 	handle, err := os.Open(tarPath)
 	if err != nil {
 		log.Printf("Error reading %s: %s\n", tarPath, err)
@@ -89,7 +94,9 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 			Key:   key,
 			Value: value,
 		}
+		tracesIndexed.Add(int64(1))
 	}
+	tarsIndexed.Add(int64(1))
 	return true
 }
 
