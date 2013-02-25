@@ -9,21 +9,19 @@ import (
 	"time"
 )
 
-func BytesPerMinutePipeline(workers int) []transformer.PipelineStage {
+func BytesPerMinutePipeline(tracesStore transformer.StoreReader, mappedStore transformer.Datastore, bytesPerMinuteStore transformer.StoreWriter, workers int) []transformer.PipelineStage {
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
 			Transformer: transformer.MakeDoTransformer(BytesPerMinuteMapper(transformer.NewNonce()), workers),
-			InputDbs:    []string{"traces"},
-			OutputDbs:   []string{"bytesperminute-mapped"},
-			OnlyKeys:    false,
+			Reader:      tracesStore,
+			Writer:      mappedStore,
 		},
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteReducer",
 			Transformer: transformer.TransformFunc(BytesPerMinuteReducer),
-			InputDbs:    []string{"bytesperminute-mapped"},
-			OutputDbs:   []string{"bytesperminute"},
-			OnlyKeys:    false,
+			Reader:      mappedStore,
+			Writer:      bytesPerMinuteStore,
 		},
 	}
 }
@@ -53,9 +51,7 @@ func (nonce BytesPerMinuteMapper) Do(inputRecord *transformer.LevelDbRecord, out
 	}
 }
 
-func BytesPerMinuteReducer(inputChan chan *transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
-	outputChan := outputChans[0]
-
+func BytesPerMinuteReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var currentSize int64
 	var currentNode []byte
 	currentTimestamp := int64(-1)
@@ -88,4 +84,5 @@ func BytesPerMinuteReducer(inputChan chan *transformer.LevelDbRecord, outputChan
 			Value: key.EncodeOrDie(currentSize),
 		}
 	}
+	close(outputChan)
 }

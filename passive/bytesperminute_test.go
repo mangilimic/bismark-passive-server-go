@@ -5,7 +5,6 @@ import (
 	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"sort"
 	"testing"
 	"time"
 )
@@ -18,41 +17,35 @@ func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
 }
 
 func runBytesPerMinutePipeline(t *testing.T, traces map[string]Trace, expectedOutput []transformer.LevelDbRecord) {
-	databases := make(map[string]map[string]string)
-	traceDatabase := make(map[string]string)
+	tracesStore := transformer.SliceStore{}
+	mappedStore := transformer.SliceStore{}
+	bytesPerMinuteStore := transformer.SliceStore{}
 	for encodedKey, trace := range traces {
 		encodedTrace, err := proto.Marshal(&trace)
 		if err != nil {
 			t.Fatalf("Error encoding protocol buffer: %v", err)
 		}
-		traceDatabase[encodedKey] = string(encodedTrace)
+		tracesStore = append(tracesStore, &transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 	}
-	databases["traces"] = traceDatabase
 
-	transformer.RunPipelineWithoutLevelDb(BytesPerMinutePipeline(1), databases, 100)
-	database, ok := databases["bytesperminute"]
-	if !ok {
-		t.Fatalf("Missing expected output database")
+	transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, 1), 0)
+	actualOutput := make(chan *transformer.LevelDbRecord, 100)
+	if err := bytesPerMinuteStore.Read(actualOutput); err != nil {
+		t.Fatalf("Error reading output: %v", err)
 	}
-	actualOutput := make([]*transformer.LevelDbRecord, 0)
-	for k, v := range database {
-		actualOutput = append(actualOutput, &transformer.LevelDbRecord{Key: []byte(k), Value: []byte(v)})
-	}
-	sort.Sort(transformer.LevelDbRecordSlice(actualOutput))
-	for idx, expectedRecord := range expectedOutput {
-		if len(actualOutput) <= idx {
-			t.Fatalf("Missing expected record %s: %s", expectedRecord.Key, expectedRecord.Value)
+	idx := 0
+	for actualRecord := range actualOutput {
+		if len(expectedOutput) <= idx {
+			t.Fatalf("Got extra record %s: %s", actualRecord.Key, actualRecord.Value)
 		}
-		actualRecord := actualOutput[idx]
+		expectedRecord := expectedOutput[idx]
 		if !bytes.Equal(expectedRecord.Key, actualRecord.Key) {
 			t.Fatalf("Expected key: %s, Got: %s", expectedRecord.Key, actualRecord.Key)
 		}
 		if !bytes.Equal(expectedRecord.Value, actualRecord.Value) {
 			t.Fatalf("Expected value: %s, Got: %s", expectedRecord.Value, actualRecord.Value)
 		}
-	}
-	for idx := len(expectedOutput); idx < len(actualOutput); idx++ {
-		t.Fatalf("Got extra record %s: %s", actualOutput[idx].Key, actualOutput[idx].Value)
+		idx++
 	}
 }
 
