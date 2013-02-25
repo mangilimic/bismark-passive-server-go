@@ -15,13 +15,14 @@ import (
 )
 
 var currentTar *expvar.String
-var tarBytesRead, tarsFailed, tarsIndexed, tracesFailed, tracesIndexed *expvar.Int
+var tarBytesRead, tarsFailed, tarsIndexed, tarsSkipped, tracesFailed, tracesIndexed *expvar.Int
 
 func init() {
 	currentTar = expvar.NewString("CurrentTar")
 	tarBytesRead = expvar.NewInt("TarBytesRead")
 	tarsFailed = expvar.NewInt("TarsFailed")
 	tarsIndexed = expvar.NewInt("TarsIndexed")
+	tarsSkipped = expvar.NewInt("TarsSkipped")
 	tracesFailed = expvar.NewInt("TracesFailed")
 	tracesIndexed = expvar.NewInt("TracesIndexed")
 }
@@ -82,7 +83,7 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 		trace, err := parseTrace(contents)
 		if err != nil {
 			tracesFailed.Add(1)
-			log.Printf("%s:%s: %v", tarPath, header.Name, err)
+			log.Printf("%s:%s: %q", tarPath, header.Name, err)
 			continue
 		}
 		key := traceKey(trace)
@@ -100,13 +101,17 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 	return true
 }
 
-func IndexTarballs(inputRecords []*transformer.LevelDbRecord, outputChan ...chan *transformer.LevelDbRecord) {
-	if len(inputRecords) != 1 || inputRecords[0].DatabaseIndex != 0 {
+func IndexTarballs(inputRecords []*transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
+	if len(inputRecords) != 1 {
+		tarsSkipped.Add(1)
+		return
+	}
+	if inputRecords[0].DatabaseIndex != 0 {
 		return
 	}
 
-	tracesChan := outputChan[0]
-	tarnamesChan := outputChan[1]
+	tracesChan := outputChans[0]
+	tarnamesChan := outputChans[1]
 
 	var tarPath string
 	key.DecodeOrDie(inputRecords[0].Key, &tarPath)
