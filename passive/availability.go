@@ -11,35 +11,29 @@ import (
 	"log"
 )
 
-func AvailabilityPipeline(writer io.Writer, timestamp int64, workers int) []transformer.PipelineStage {
+func AvailabilityPipeline(tracesStore transformer.StoreReader, intervalsStore, nodesStore transformer.Datastore, jsonWriter io.Writer, timestamp int64, workers int) []transformer.PipelineStage {
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "AvailabilityMapper",
 			Transformer: transformer.TransformFunc(AvailabilityMapper),
-			InputDbs:    []string{"traces"},
-			OutputDbs:   []string{"availability-intervals"},
-			OnlyKeys:    false,
+			Reader:      tracesStore,
+			Writer:      intervalsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "AvailabilityReducer",
 			Transformer: transformer.TransformFunc(AvailabilityReducer),
-			InputDbs:    []string{"availability-intervals"},
-			OutputDbs:   []string{"availability-nodes"},
-			OnlyKeys:    false,
+			Reader:      intervalsStore,
+			Writer:      nodesStore,
 		},
 		transformer.PipelineStage{
-			Name:        "AvailabilityJson",
-			Transformer: AvailabilityJson{writer, timestamp},
-			InputDbs:    []string{"availability-nodes"},
-			OutputDbs:   []string{},
-			OnlyKeys:    false,
+			Name:   "AvailabilityJson",
+			Reader: nodesStore,
+			Writer: AvailabilityJsonStore{writer: jsonWriter, timestamp: timestamp},
 		},
 	}
 }
 
-func AvailabilityMapper(inputChan chan *transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
-	outputChan := outputChans[0]
-
+func AvailabilityMapper(inputChan chan *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
 	var expectedSequenceNumber int32
 	currentStartTimestamp := int64(-1)
 	var currentSession []byte
@@ -107,9 +101,7 @@ func AvailabilityMapper(inputChan chan *transformer.LevelDbRecord, outputChans .
 	}
 }
 
-func AvailabilityReducer(inputChan chan *transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
-	outputChan := outputChans[0]
-
+func AvailabilityReducer(inputChan chan *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
 	var currentNode []byte
 	availability := make([][]int64, 2)
 	for record := range inputChan {
@@ -147,23 +139,32 @@ func AvailabilityReducer(inputChan chan *transformer.LevelDbRecord, outputChans 
 	}
 }
 
-type AvailabilityJson struct {
+type AvailabilityJsonStore struct {
 	writer    io.Writer
 	timestamp int64
 }
 
-func (t AvailabilityJson) Do(inputChan chan *transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
-	fmt.Fprintf(t.writer, "[{")
+func (store AvailabilityJsonStore) Write(records chan *transformer.LevelDbRecord) error {
+	if _, err := fmt.Fprintf(store.writer, "[{"); err != nil {
+		return err
+	}
 	first := true
-	for record := range inputChan {
+	for record := range records {
 		var nodeId string
 		key.DecodeOrDie(record.Key, &nodeId)
 		if first {
 			first = false
 		} else {
-			fmt.Fprintf(t.writer, ",")
+			if _, err := fmt.Fprintf(store.writer, ","); err != nil {
+				return err
+			}
 		}
-		fmt.Fprintf(t.writer, "\"%s\": %s", nodeId, record.Value)
+		if _, err := fmt.Fprintf(store.writer, "\"%s\": %s", nodeId, record.Value); err != nil {
+			return err
+		}
 	}
-	fmt.Fprintf(t.writer, "}, %d]", t.timestamp*1000)
+	if _, err := fmt.Fprintf(store.writer, "}, %d]", store.timestamp*1000); err != nil {
+		return err
+	}
+	return nil
 }

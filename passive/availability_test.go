@@ -9,8 +9,7 @@ import (
 )
 
 func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) {
-	databases := make(map[string]map[string]string)
-	traceDatabase := make(map[string]string)
+	tracesSlice := make([]*transformer.LevelDbRecord, 0)
 	for encodedKey, timestamp := range timestamps {
 		trace := Trace{
 			TraceCreationTimestamp: proto.Int64(timestamp),
@@ -19,12 +18,14 @@ func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) 
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		traceDatabase[encodedKey] = string(encodedTrace)
+		tracesSlice = append(tracesSlice, &transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 	}
-	databases["traces"] = traceDatabase
 
+	tracesStore := transformer.SliceStore(tracesSlice)
+	intervalsStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
+	nodesStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
 	writer := bytes.NewBuffer([]byte{})
-	transformer.RunPipelineWithoutLevelDb(AvailabilityPipeline(writer, startTimestamp, 1), databases, 100)
+	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &nodesStore, writer, startTimestamp, 1), 0)
 	fmt.Printf("%s", writer.Bytes())
 }
 
