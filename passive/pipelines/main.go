@@ -8,12 +8,19 @@ import (
 	"github.com/sburnett/transformer"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 )
 
-func getPipelineStages(pipelineName string, workers int) []transformer.PipelineStage {
+func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.PipelineStage {
+	dbPath := func(filename string) string {
+		return filepath.Join(dbRoot, filename)
+	}
 	switch pipelineName {
 	case "availability":
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"), transformer.ReadAllRecords, nil)
+		intervalsStore := transformer.NewLevelDbStore(dbPath("availability-intervals"), transformer.ReadAllRecords, transformer.WriteAllRecords)
+		nodesStore := transformer.NewLevelDbStore(dbPath("availability-nodes"), transformer.ReadAllRecords, transformer.WriteAllRecords)
 		flagset := flag.NewFlagSet("availability", flag.ExitOnError)
 		jsonOutput := flagset.String("json_output", "/dev/null", "Write availiability in JSON format to this file.")
 		flagset.Parse(flag.Args()[2:])
@@ -21,24 +28,29 @@ func getPipelineStages(pipelineName string, workers int) []transformer.PipelineS
 		if err != nil {
 			log.Fatalf("Error opening JSON output: %v", err)
 		}
-		return passive.AvailabilityPipeline(jsonHandle, time.Now().Unix(), workers)
+		return passive.AvailabilityPipeline(tracesStore, intervalsStore, nodesStore, jsonHandle, time.Now().Unix(), workers)
 	case "bytesperminute":
-		return passive.BytesPerMinutePipeline(workers)
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"), transformer.ReadAllRecords, nil)
+		mappedStore := transformer.NewLevelDbStore(dbPath("bytesperminute-mapped"), transformer.ReadAllRecords, transformer.WriteAllRecords)
+		bytesPerMinuteStore := transformer.NewLevelDbStore(dbPath("bytesperminute"), nil, transformer.WriteAllRecords)
+		return passive.BytesPerMinutePipeline(tracesStore, mappedStore, bytesPerMinuteStore, workers)
 	case "filter":
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
 		sessionStartDate := flagset.String("session_start_date", "20120301", "Retain only session starting after this date, in YYYYMMDD format.")
 		sessionEndDate := flagset.String("session_end_date", "20120401", "Retain only session starting before this date, in YYYYMMDD format.")
 		flagset.Parse(flag.Args()[2:])
-		return passive.FilterTracesPipeline(*nodeId, *sessionStartDate, *sessionEndDate, workers)
+		return passive.FilterTracesPipeline(dbRoot, *nodeId, *sessionStartDate, *sessionEndDate, workers)
 	case "index":
+		tarnamesStore := transformer.NewLevelDbStore(dbPath("tarnames"), transformer.ReadAllRecords, nil)
+		tarnamesIndexedStore := transformer.NewLevelDbStore(dbPath("tarnames-indexed"), transformer.ReadAllRecords, transformer.WriteAllRecords)
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"), nil, transformer.WriteAllRecords)
 		return []transformer.PipelineStage{
 			transformer.PipelineStage{
 				Name:        "ParseTraces",
-				Transformer: transformer.MakeMultipleOutputsGroupDoFunc(passive.IndexTarballs, workers),
-				InputDbs:    []string{"tarnames", "tarnames-indexed"},
-				OutputDbs:   []string{"traces", "tarnames-indexed"},
-				OnlyKeys:    true,
+				Transformer: transformer.MakeMultipleOutputsGroupDoFunc(passive.IndexTarballs, 2, workers),
+				Reader:      transformer.NewDemuxStoreReader(tarnamesStore, tarnamesIndexedStore),
+				Writer:      transformer.NewMuxedStoreWriter(tracesStore, tarnamesIndexedStore),
 			},
 		}
 	//case "bytesperdevice":
@@ -93,6 +105,6 @@ func main() {
 
 	go cube.Run(fmt.Sprintf("bismark_passive_pipeline_%s", pipelineName))
 
-	stages := getPipelineStages(pipelineName, *workers)
-	transformer.RunPipeline(dbRoot, stages, *skipStages)
+	stages := getPipelineStages(pipelineName, dbRoot, *workers)
+	transformer.RunPipeline(stages, *skipStages)
 }
