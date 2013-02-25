@@ -33,7 +33,7 @@ func AvailabilityPipeline(tracesStore transformer.StoreReader, intervalsStore, n
 	}
 }
 
-func AvailabilityMapper(inputChan chan *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
+func AvailabilityMapper(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var expectedSequenceNumber int32
 	currentStartTimestamp := int64(-1)
 	var currentSession []byte
@@ -99,9 +99,10 @@ func AvailabilityMapper(inputChan chan *transformer.LevelDbRecord, outputChan ch
 			}
 		}
 	}
+	close(outputChan)
 }
 
-func AvailabilityReducer(inputChan chan *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
+func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var currentNode []byte
 	availability := make([][]int64, 2)
 	for record := range inputChan {
@@ -137,6 +138,7 @@ func AvailabilityReducer(inputChan chan *transformer.LevelDbRecord, outputChan c
 			Value: value,
 		}
 	}
+	close(outputChan)
 }
 
 type AvailabilityJsonStore struct {
