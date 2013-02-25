@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("Error enumerating tarballs: ", err))
 	}
-	log.Printf("Indexing %d tarballs.", len(tarFiles))
+	log.Printf("Found %d tarballs.", len(tarFiles))
 	for _, tarFile := range tarFiles {
 		absTarFile, err := filepath.Abs(tarFile)
 		if err != nil {
