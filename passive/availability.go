@@ -11,18 +11,24 @@ import (
 	"log"
 )
 
-func AvailabilityPipeline(tracesStore transformer.StoreReader, intervalsStore, nodesStore transformer.Datastore, jsonWriter io.Writer, timestamp int64, workers int) []transformer.PipelineStage {
+func AvailabilityPipeline(tracesStore transformer.StoreReader, intervalsStore, consolidatedStore, nodesStore transformer.Datastore, jsonWriter io.Writer, excludeRangesStore transformer.StoreWriter, timestamp int64, workers int) []transformer.PipelineStage {
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
-			Name:        "AvailabilityMapper",
-			Transformer: transformer.TransformFunc(AvailabilityMapper),
+			Name:        "AvailabilityIntervals",
+			Transformer: transformer.TransformFunc(AvailabilityIntervals),
 			Reader:      tracesStore,
 			Writer:      intervalsStore,
 		},
 		transformer.PipelineStage{
+			Name:        "ConsolidateAvailabilityIntervals",
+			Transformer: transformer.TransformFunc(ConsolidateAvailabilityIntervals),
+			Reader:      intervalsStore,
+			Writer:      consolidatedStore,
+		},
+		transformer.PipelineStage{
 			Name:        "AvailabilityReducer",
 			Transformer: transformer.TransformFunc(AvailabilityReducer),
-			Reader:      intervalsStore,
+			Reader:      consolidatedStore,
 			Writer:      nodesStore,
 		},
 		transformer.PipelineStage{
@@ -30,113 +36,177 @@ func AvailabilityPipeline(tracesStore transformer.StoreReader, intervalsStore, n
 			Reader: nodesStore,
 			Writer: AvailabilityJsonStore{writer: jsonWriter, timestamp: timestamp},
 		},
+		transformer.PipelineStage{
+			Name:        "GenerateExcludedRanges",
+			Transformer: transformer.MakeMapFunc(GenerateExcludedRanges, workers),
+			Reader:      consolidatedStore,
+			Writer:      excludeRangesStore,
+		},
 	}
 }
 
-func AvailabilityMapper(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var expectedSequenceNumber int32
-	currentStartTimestamp := int64(-1)
-	var currentSession []byte
-	var previousTrace []byte
+type IntervalKey struct {
+	NodeId               []byte
+	AnonymizationContext []byte
+	SessionId            int64
+	FirstSequenceNumber  int32
+	LastSequenceNumber   int32
+}
+
+func DecodeIntervalKey(encodedKey []byte) *IntervalKey {
+	decodedKey := new(IntervalKey)
+	key.DecodeOrDie(
+		encodedKey,
+		&decodedKey.NodeId,
+		&decodedKey.AnonymizationContext,
+		&decodedKey.SessionId,
+		&decodedKey.FirstSequenceNumber,
+		&decodedKey.LastSequenceNumber)
+	return decodedKey
+}
+
+func EncodeIntervalKey(decodedKey *IntervalKey) []byte {
+	return key.EncodeOrDie(
+		decodedKey.NodeId,
+		decodedKey.AnonymizationContext,
+		decodedKey.SessionId,
+		decodedKey.FirstSequenceNumber,
+		decodedKey.LastSequenceNumber)
+}
+
+func AvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	writeRecord := func(firstKey, lastKey *TraceKey, firstTrace, lastTrace []byte) {
+		firstTraceDecoded := Trace{}
+		if err := proto.Unmarshal(firstTrace, &firstTraceDecoded); err != nil {
+			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
+		}
+		lastTraceDecoded := Trace{}
+		if err := proto.Unmarshal(lastTrace, &lastTraceDecoded); err != nil {
+			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
+		}
+		intervalKey := IntervalKey{
+			NodeId:               firstKey.NodeId,
+			AnonymizationContext: firstKey.AnonymizationContext,
+			SessionId:            firstKey.SessionId,
+			FirstSequenceNumber:  firstKey.SequenceNumber,
+			LastSequenceNumber:   lastKey.SequenceNumber,
+		}
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   EncodeIntervalKey(&intervalKey),
+			Value: key.EncodeOrDie(*firstTraceDecoded.TraceCreationTimestamp, *lastTraceDecoded.TraceCreationTimestamp),
+		}
+	}
+
+	var firstKey, lastKey *TraceKey
+	var firstTrace, lastTrace []byte
+	var expectedTraceKey []byte
 	for record := range inputChan {
 		traceKey := DecodeTraceKey(record.Key)
-
-		session := EncodeSessionKey(&SessionKey{
+		expectedNextTraceKey := EncodeTraceKey(&TraceKey{
 			NodeId:               traceKey.NodeId,
 			AnonymizationContext: traceKey.AnonymizationContext,
 			SessionId:            traceKey.SessionId,
+			SequenceNumber:       traceKey.SequenceNumber + 1,
 		})
-		if currentSession == nil {
-			currentSession = session
-		}
 
-		if !bytes.Equal(currentSession, session) {
-			if previousTrace != nil {
-				trace := Trace{}
-				if err := proto.Unmarshal(previousTrace, &trace); err != nil {
-					log.Fatalf("Error ummarshaling protocol buffer: %v", err)
-				}
-				if currentStartTimestamp >= 0 && trace.TraceCreationTimestamp != nil {
-					currentEndTimestamp := *trace.TraceCreationTimestamp
-					outputChan <- &transformer.LevelDbRecord{
-						Key:   currentSession,
-						Value: key.EncodeOrDie(currentStartTimestamp, currentEndTimestamp),
-					}
-				}
+		if !bytes.Equal(expectedTraceKey, record.Key) {
+			if firstTrace != nil {
+				writeRecord(firstKey, lastKey, firstTrace, lastTrace)
 			}
-			currentSession = session
-			previousTrace = nil
-			currentStartTimestamp = -1
-			expectedSequenceNumber = 0
+			firstKey = traceKey
+			firstTrace = record.Value
 		}
-
-		if traceKey.SequenceNumber != expectedSequenceNumber {
-			continue
-		}
-		if traceKey.SequenceNumber == 0 {
-			trace := Trace{}
-			if err := proto.Unmarshal(record.Value, &trace); err != nil {
-				log.Fatalf("Error ummarshaling protocol buffer: %v", err)
-			}
-			if trace.TraceCreationTimestamp == nil {
-				continue
-			}
-			currentStartTimestamp = *trace.TraceCreationTimestamp
-		}
-		expectedSequenceNumber++
-		previousTrace = record.Value
+		lastKey = traceKey
+		lastTrace = record.Value
+		expectedTraceKey = expectedNextTraceKey
 	}
-	if previousTrace != nil {
-		trace := Trace{}
-		if err := proto.Unmarshal(previousTrace, &trace); err != nil {
-			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
+	if firstTrace != nil {
+		writeRecord(firstKey, lastKey, firstTrace, lastTrace)
+	}
+	close(outputChan)
+}
+
+func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	writeRecord := func(firstKey, lastKey *IntervalKey, firstInterval, lastInterval []byte) {
+		var firstIntervalStart, firstIntervalEnd, lastIntervalStart, lastIntervalEnd int64
+		key.DecodeOrDie(firstInterval, &firstIntervalStart, &firstIntervalEnd)
+		key.DecodeOrDie(lastInterval, &lastIntervalStart, &lastIntervalEnd)
+		intervalKey := IntervalKey{
+			NodeId:               firstKey.NodeId,
+			AnonymizationContext: firstKey.AnonymizationContext,
+			SessionId:            firstKey.SessionId,
+			FirstSequenceNumber:  firstKey.FirstSequenceNumber,
+			LastSequenceNumber:   lastKey.LastSequenceNumber,
 		}
-		if currentStartTimestamp >= 0 && trace.TraceCreationTimestamp != nil {
-			currentEndTimestamp := *trace.TraceCreationTimestamp
-			outputChan <- &transformer.LevelDbRecord{
-				Key:   currentSession,
-				Value: key.EncodeOrDie(currentStartTimestamp, currentEndTimestamp),
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   EncodeIntervalKey(&intervalKey),
+			Value: key.EncodeOrDie(firstIntervalStart, lastIntervalEnd),
+		}
+	}
+
+	var firstIntervalKey, lastIntervalKey *IntervalKey
+	var firstInterval, lastInterval []byte
+	var previousSessionKeyEncoded []byte
+	for record := range inputChan {
+		intervalKey := DecodeIntervalKey(record.Key)
+		sessionKey := &SessionKey{
+			NodeId:               intervalKey.NodeId,
+			AnonymizationContext: intervalKey.AnonymizationContext,
+			SessionId:            intervalKey.SessionId,
+		}
+		sessionKeyEncoded := EncodeSessionKey(sessionKey)
+
+		if !bytes.Equal(sessionKeyEncoded, previousSessionKeyEncoded) || intervalKey.FirstSequenceNumber != lastIntervalKey.LastSequenceNumber+1 {
+			if firstIntervalKey != nil {
+				writeRecord(firstIntervalKey, lastIntervalKey, firstInterval, lastInterval)
 			}
+			firstIntervalKey = intervalKey
+			firstInterval = record.Value
 		}
+		previousSessionKeyEncoded = sessionKeyEncoded
+		lastIntervalKey = intervalKey
+		lastInterval = record.Value
+	}
+	if firstIntervalKey != nil {
+		writeRecord(firstIntervalKey, lastIntervalKey, firstInterval, lastInterval)
 	}
 	close(outputChan)
 }
 
 func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	writeRecord := func(currentNode []byte, availability [][]int64) {
+		if currentNode != nil {
+			value, err := json.Marshal(availability)
+			if err != nil {
+				log.Fatalf("Error marshaling JSON: %v", err)
+			}
+			outputChan <- &transformer.LevelDbRecord{
+				Key:   key.EncodeOrDie(currentNode),
+				Value: value,
+			}
+		}
+	}
+
 	var currentNode []byte
 	availability := make([][]int64, 2)
 	for record := range inputChan {
-		sessionKey := DecodeSessionKey(record.Key)
+		intervalKey := DecodeIntervalKey(record.Key)
 
-		if !bytes.Equal(currentNode, sessionKey.NodeId) {
-			if currentNode != nil {
-				value, err := json.Marshal(availability)
-				if err != nil {
-					log.Fatalf("Error marshaling JSON: %v", err)
-				}
-				outputChan <- &transformer.LevelDbRecord{
-					Key:   key.EncodeOrDie(currentNode),
-					Value: value,
-				}
-			}
-			currentNode = sessionKey.NodeId
+		if !bytes.Equal(currentNode, intervalKey.NodeId) {
+			writeRecord(currentNode, availability)
+			currentNode = intervalKey.NodeId
 			availability = make([][]int64, 2)
 		}
 
-		var startTimestamp, endTimestamp int64
-		key.DecodeOrDie(record.Value, &startTimestamp, &endTimestamp)
-		availability[0] = append(availability[0], startTimestamp*1000)
-		availability[1] = append(availability[1], endTimestamp*1000)
+		if intervalKey.FirstSequenceNumber == 0 {
+			var startTimestamp, endTimestamp int64
+			key.DecodeOrDie(record.Value, &startTimestamp, &endTimestamp)
+			availability[0] = append(availability[0], startTimestamp*1000)
+			availability[1] = append(availability[1], endTimestamp*1000)
+		}
 	}
 	if currentNode != nil {
-		value, err := json.Marshal(availability)
-		if err != nil {
-			log.Fatalf("Error marshaling JSON: %v", err)
-		}
-		outputChan <- &transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie(currentNode),
-			Value: value,
-		}
+		writeRecord(currentNode, availability)
 	}
 	close(outputChan)
 }
@@ -169,4 +239,24 @@ func (store AvailabilityJsonStore) Write(records chan *transformer.LevelDbRecord
 		return err
 	}
 	return nil
+}
+
+func GenerateExcludedRanges(record *transformer.LevelDbRecord) *transformer.LevelDbRecord {
+	intervalKey := DecodeIntervalKey(record.Key)
+	newKey := TraceKey{
+		NodeId:               intervalKey.NodeId,
+		AnonymizationContext: intervalKey.AnonymizationContext,
+		SessionId:            intervalKey.SessionId,
+		SequenceNumber:       intervalKey.FirstSequenceNumber,
+	}
+	newValue := TraceKey{
+		NodeId:               intervalKey.NodeId,
+		AnonymizationContext: intervalKey.AnonymizationContext,
+		SessionId:            intervalKey.SessionId,
+		SequenceNumber:       intervalKey.LastSequenceNumber,
+	}
+	return &transformer.LevelDbRecord{
+		Key:   EncodeTraceKey(&newKey),
+		Value: EncodeTraceKey(&newValue),
+	}
 }

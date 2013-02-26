@@ -18,9 +18,26 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 	}
 	switch pipelineName {
 	case "availability":
-		tracesStore := transformer.NewLevelDbStore(dbPath("traces"), transformer.ReadAllRecords, nil)
-		intervalsStore := transformer.NewLevelDbStore(dbPath("availability-intervals"), transformer.ReadAllRecords, transformer.WriteAllRecords)
-		nodesStore := transformer.NewLevelDbStore(dbPath("availability-nodes"), transformer.ReadAllRecords, transformer.WriteAllRecords)
+		excludeRangesStore := transformer.NewLevelDbStore(
+			dbPath("availability-done"),
+			transformer.ReadAllRecords,
+			transformer.WriteAllRecordsDeletingFirst)
+		tracesStore := transformer.NewLevelDbStore(
+			dbPath("traces"),
+			transformer.ReadRecordsExcludingRanges(excludeRangesStore),
+			nil)
+		intervalsStore := transformer.NewLevelDbStore(
+			dbPath("availability-intervals"),
+			transformer.ReadAllRecords,
+			transformer.WriteAllRecords)
+		consolidatedStore := transformer.NewLevelDbStore(
+			dbPath("availability-consolidated"),
+			transformer.ReadAllRecords,
+			transformer.WriteAllRecordsDeletingFirst)
+		nodesStore := transformer.NewLevelDbStore(
+			dbPath("availability-nodes"),
+			transformer.ReadAllRecords,
+			transformer.WriteAllRecords)
 		flagset := flag.NewFlagSet("availability", flag.ExitOnError)
 		jsonOutput := flagset.String("json_output", "/dev/null", "Write availiability in JSON format to this file.")
 		flagset.Parse(flag.Args()[2:])
@@ -28,7 +45,15 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		if err != nil {
 			log.Fatalf("Error opening JSON output: %v", err)
 		}
-		return passive.AvailabilityPipeline(tracesStore, intervalsStore, nodesStore, jsonHandle, time.Now().Unix(), workers)
+		return passive.AvailabilityPipeline(
+			tracesStore,
+			intervalsStore,
+			consolidatedStore,
+			nodesStore,
+			jsonHandle,
+			excludeRangesStore,
+			time.Now().Unix(),
+			workers)
 	case "bytesperminute":
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"), transformer.ReadAllRecords, nil)
 		mappedStore := transformer.NewLevelDbStore(dbPath("bytesperminute-mapped"), transformer.ReadAllRecords, transformer.WriteAllRecords)
