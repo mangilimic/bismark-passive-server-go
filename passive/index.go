@@ -75,22 +75,31 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
 			continue
 		}
-		var traceHandle io.Reader = tr
+		var traceContents []byte
 		if filepath.Ext(header.Name) == ".gz" {
 			gzipHandle, err := gzip.NewReader(tr)
 			if err != nil {
 				log.Printf("Error gunzipping trace: %v", err)
 				continue
 			}
-			traceHandle = gzipHandle
+			contents, err := ioutil.ReadAll(gzipHandle)
+			if err != nil {
+				tracesFailed.Add(1)
+				log.Printf("%s/%s: %v", tarPath, header.Name, err)
+				continue
+			}
+			gzipHandle.Close()
+			traceContents = contents
+		} else {
+			contents, err := ioutil.ReadAll(tr)
+			if err != nil {
+				tracesFailed.Add(1)
+				log.Printf("%s/%s: %v", tarPath, header.Name, err)
+				continue
+			}
+			traceContents = contents
 		}
-		contents, err := ioutil.ReadAll(traceHandle)
-		if err != nil {
-			tracesFailed.Add(1)
-			log.Printf("%s/%s: %v", tarPath, header.Name, err)
-			continue
-		}
-		trace, err := parseTrace(contents)
+		trace, err := parseTrace(traceContents)
 		if err != nil {
 			tracesFailed.Add(1)
 			log.Printf("%s:%s: %q", tarPath, header.Name, err)
