@@ -24,7 +24,7 @@ func main() {
 	tarsPath := flag.Arg(0)
 	indexPath := flag.Arg(1)
 
-	go cube.Run("bismark_passive_index")
+	go cube.Run("bismark_passive_scan")
 
 	opts := levigo.NewOptions()
 	opts.SetCreateIfMissing(true)
