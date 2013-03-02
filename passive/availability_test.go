@@ -9,7 +9,8 @@ import (
 )
 
 func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) {
-	tracesSlice := make([]*transformer.LevelDbRecord, 0)
+	tracesStore := transformer.SliceStore{}
+	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range timestamps {
 		trace := Trace{
 			TraceCreationTimestamp: proto.Int64(timestamp),
@@ -18,21 +19,22 @@ func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) 
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		tracesSlice = append(tracesSlice, &transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 	}
+	tracesStore.EndWriting()
 
-	tracesStore := transformer.SliceStore(tracesSlice)
-	intervalsStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
-	consolidatedStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
-	nodesStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
+	intervalsStore := transformer.SliceStore{}
+	consolidatedStore := transformer.SliceStore{}
+	nodesStore := transformer.SliceStore{}
 	writer := bytes.NewBuffer([]byte{})
-	excludeRangesStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
+	excludeRangesStore := transformer.SliceStore{}
 	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, startTimestamp, 1), 0)
 	fmt.Printf("%s", writer.Bytes())
 }
 
 func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[string]int64, moreTimestamps map[string]int64) {
-	tracesSlice := make([]*transformer.LevelDbRecord, 0)
+	tracesStore := transformer.SliceStore{}
+	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range timestamps {
 		trace := Trace{
 			TraceCreationTimestamp: proto.Int64(timestamp),
@@ -41,16 +43,29 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		tracesSlice = append(tracesSlice, &transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 	}
+	tracesStore.EndWriting()
 
-	tracesStore := transformer.SliceStore(tracesSlice)
-	intervalsStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
-	consolidatedStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
-	nodesStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
+	intervalsStore := transformer.SliceStore{}
+	consolidatedStore := transformer.SliceStore{}
+	nodesStore := transformer.SliceStore{}
 	writer := bytes.NewBuffer([]byte{})
-	excludeRangesStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
+	excludeRangesStore := transformer.SliceStore{}
 	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, startTimestamp, 1), 0)
+
+	tracesStore.BeginWriting()
+	for encodedKey, timestamp := range moreTimestamps {
+		trace := Trace{
+			TraceCreationTimestamp: proto.Int64(timestamp),
+		}
+		encodedTrace, err := proto.Marshal(&trace)
+		if err != nil {
+			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
+		}
+		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+	}
+	tracesStore.EndWriting()
 
 	anotherTracesSlice := make([]*transformer.LevelDbRecord, 0)
 	for encodedKey, timestamp := range moreTimestamps {
@@ -64,13 +79,8 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 		anotherTracesSlice = append(anotherTracesSlice, &transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 	}
 
-	anotherTracesStore := transformer.SliceStore(anotherTracesSlice)
-	anotherConsolidatedStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
-	anotherNodesStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
 	anotherWriter := bytes.NewBuffer([]byte{})
-	anotherExcludeRangesStore := transformer.SliceStore(make([]*transformer.LevelDbRecord, 0))
-	transformer.RunPipeline(AvailabilityPipeline(&anotherTracesStore, &intervalsStore, &anotherConsolidatedStore, &anotherNodesStore, anotherWriter, &anotherExcludeRangesStore, startTimestamp, 1), 0)
-
+	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, anotherWriter, &excludeRangesStore, startTimestamp, 1), 0)
 	fmt.Printf("%s", anotherWriter.Bytes())
 }
 
@@ -81,7 +91,7 @@ func ExampleAvailability_simple() {
 		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(2))): int64(20),
 	})
 	// Output:
-	// [{"node0": [[0],[20000]]}, 123000]
+	// [{"node0": [[0],[20000],null,null]}, 123000]
 }
 
 func ExampleAvailability_multipleSessions() {
@@ -92,7 +102,7 @@ func ExampleAvailability_multipleSessions() {
 		string(key.EncodeOrDie("node0", "anon0", int64(1), int32(1))): int64(30),
 	})
 	// Output:
-	// [{"node0": [[0,20000],[10000,30000]]}, 123000]
+	// [{"node0": [[0,20000],[10000,30000],null,null]}, 123000]
 }
 
 func ExampleAvailability_missingSequenceNumbers() {
@@ -105,7 +115,7 @@ func ExampleAvailability_missingSequenceNumbers() {
 		string(key.EncodeOrDie("node0", "anon0", int64(1), int32(3))): int64(60),
 	})
 	// Output:
-	// [{"node0": [[0,40000],[10000,50000]]}, 123000]
+	// [{"node0": [[0,40000],[10000,50000],[30000,60000],[30000,60000]]}, 123000]
 }
 
 func ExampleAvailability_multipleNodes() {
@@ -116,7 +126,7 @@ func ExampleAvailability_multipleNodes() {
 		string(key.EncodeOrDie("node1", "anon0", int64(0), int32(1))): int64(50),
 	})
 	// Output:
-	// [{"node0": [[0],[10000]],"node1": [[40000],[50000]]}, 123000]
+	// [{"node0": [[0],[10000],null,null],"node1": [[40000],[50000],null,null]}, 123000]
 }
 
 func ExampleAvailability_multipleNodesMissingSequenceNumbers() {
@@ -129,7 +139,7 @@ func ExampleAvailability_multipleNodesMissingSequenceNumbers() {
 		string(key.EncodeOrDie("node1", "anon0", int64(0), int32(3))): int64(60),
 	})
 	// Output:
-	// [{"node0": [[0],[10000]],"node1": [[40000],[50000]]}, 123000]
+	// [{"node0": [[0],[10000],[30000],[30000]],"node1": [[40000],[50000],[60000],[60000]]}, 123000]
 }
 
 func ExampleAvailability_missingFirstSequenceNumber() {
@@ -142,7 +152,7 @@ func ExampleAvailability_missingFirstSequenceNumber() {
 		string(key.EncodeOrDie("node0", "anon0", int64(2), int32(1))): int64(40),
 	})
 	// Output:
-	// [{"node0": [[0,30000],[10000,40000]]}, 123000]
+	// [{"node0": [[0,30000],[10000,40000],[20000],[25000]]}, 123000]
 }
 
 func ExampleAvailability_augment() {
@@ -155,7 +165,7 @@ func ExampleAvailability_augment() {
 		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(4))): int64(40),
 	})
 	// Output:
-	// [{"node0": [[0],[40000]]}, 123000]
+	// [{"node0": [[0],[40000],null,null]}, 123000]
 }
 
 func ExampleAvailability_augmentOutOfOrder() {
@@ -168,7 +178,7 @@ func ExampleAvailability_augmentOutOfOrder() {
 		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(4))): int64(40),
 	})
 	// Output:
-	// [{"node0": [[0],[40000]]}, 123000]
+	// [{"node0": [[0],[40000],null,null]}, 123000]
 }
 
 func ExampleAvailability_augmentMissing() {
@@ -179,5 +189,5 @@ func ExampleAvailability_augmentMissing() {
 		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(3))): int64(20),
 	})
 	// Output:
-	// [{"node0": [[0],[10000]]}, 123000]
+	// [{"node0": [[0],[10000],[20000],[20000]]}, 123000]
 }

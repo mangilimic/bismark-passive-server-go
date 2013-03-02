@@ -11,36 +11,36 @@ import (
 	"log"
 )
 
-func AvailabilityPipeline(tracesStore transformer.StoreReader, intervalsStore, consolidatedStore, nodesStore transformer.Datastore, jsonWriter io.Writer, excludeRangesStore transformer.StoreWriter, timestamp int64, workers int) []transformer.PipelineStage {
+func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore transformer.Datastore, consolidatedStore, nodesStore transformer.DatastoreFull, jsonWriter io.Writer, excludeRangesStore transformer.DatastoreFull, timestamp int64, workers int) []transformer.PipelineStage {
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "AvailabilityIntervals",
 			Transformer: transformer.TransformFunc(AvailabilityIntervals),
-			Reader:      tracesStore,
+			Reader:      transformer.ReadExcludingRanges(tracesStore, excludeRangesStore),
 			Writer:      intervalsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "ConsolidateAvailabilityIntervals",
 			Transformer: transformer.TransformFunc(ConsolidateAvailabilityIntervals),
 			Reader:      intervalsStore,
-			Writer:      consolidatedStore,
+			Writer:      transformer.TruncateBeforeWriting(consolidatedStore),
 		},
 		transformer.PipelineStage{
 			Name:        "AvailabilityReducer",
 			Transformer: transformer.TransformFunc(AvailabilityReducer),
 			Reader:      consolidatedStore,
-			Writer:      nodesStore,
+			Writer:      transformer.TruncateBeforeWriting(nodesStore),
 		},
 		transformer.PipelineStage{
 			Name:   "AvailabilityJson",
 			Reader: nodesStore,
-			Writer: AvailabilityJsonStore{writer: jsonWriter, timestamp: timestamp},
+			Writer: &AvailabilityJsonStore{writer: jsonWriter, timestamp: timestamp},
 		},
 		transformer.PipelineStage{
 			Name:        "GenerateExcludedRanges",
 			Transformer: transformer.MakeMapFunc(GenerateExcludedRanges, workers),
 			Reader:      consolidatedStore,
-			Writer:      excludeRangesStore,
+			Writer:      transformer.TruncateBeforeWriting(excludeRangesStore),
 		},
 	}
 }
@@ -174,9 +174,9 @@ func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.Le
 }
 
 func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	writeRecord := func(currentNode []byte, availability [][]int64) {
+	writeRecord := func(currentNode []byte, points [][]int64) {
 		if currentNode != nil {
-			value, err := json.Marshal(availability)
+			value, err := json.Marshal(points)
 			if err != nil {
 				log.Fatalf("Error marshaling JSON: %v", err)
 			}
@@ -188,25 +188,28 @@ func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 	}
 
 	var currentNode []byte
-	availability := make([][]int64, 2)
+	points := make([][]int64, 4)
 	for record := range inputChan {
 		intervalKey := DecodeIntervalKey(record.Key)
 
 		if !bytes.Equal(currentNode, intervalKey.NodeId) {
-			writeRecord(currentNode, availability)
+			writeRecord(currentNode, points)
 			currentNode = intervalKey.NodeId
-			availability = make([][]int64, 2)
+			points = make([][]int64, 4)
 		}
 
+		var startTimestamp, endTimestamp int64
+		key.DecodeOrDie(record.Value, &startTimestamp, &endTimestamp)
 		if intervalKey.FirstSequenceNumber == 0 {
-			var startTimestamp, endTimestamp int64
-			key.DecodeOrDie(record.Value, &startTimestamp, &endTimestamp)
-			availability[0] = append(availability[0], startTimestamp*1000)
-			availability[1] = append(availability[1], endTimestamp*1000)
+			points[0] = append(points[0], startTimestamp*1000)
+			points[1] = append(points[1], endTimestamp*1000)
+		} else {
+			points[2] = append(points[2], startTimestamp*1000)
+			points[3] = append(points[3], endTimestamp*1000)
 		}
 	}
 	if currentNode != nil {
-		writeRecord(currentNode, availability)
+		writeRecord(currentNode, points)
 	}
 	close(outputChan)
 }
@@ -214,27 +217,34 @@ func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 type AvailabilityJsonStore struct {
 	writer    io.Writer
 	timestamp int64
+	first     bool
 }
 
-func (store AvailabilityJsonStore) Write(records chan *transformer.LevelDbRecord) error {
+func (store *AvailabilityJsonStore) BeginWriting() error {
 	if _, err := fmt.Fprintf(store.writer, "[{"); err != nil {
 		return err
 	}
-	first := true
-	for record := range records {
-		var nodeId string
-		key.DecodeOrDie(record.Key, &nodeId)
-		if first {
-			first = false
-		} else {
-			if _, err := fmt.Fprintf(store.writer, ","); err != nil {
-				return err
-			}
-		}
-		if _, err := fmt.Fprintf(store.writer, "\"%s\": %s", nodeId, record.Value); err != nil {
+	store.first = true
+	return nil
+}
+
+func (store *AvailabilityJsonStore) WriteRecord(record *transformer.LevelDbRecord) error {
+	var nodeId string
+	key.DecodeOrDie(record.Key, &nodeId)
+	if store.first {
+		store.first = false
+	} else {
+		if _, err := fmt.Fprintf(store.writer, ","); err != nil {
 			return err
 		}
 	}
+	if _, err := fmt.Fprintf(store.writer, "\"%s\": %s", nodeId, record.Value); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (store *AvailabilityJsonStore) EndWriting() error {
 	if _, err := fmt.Fprintf(store.writer, "}, %d]", store.timestamp*1000); err != nil {
 		return err
 	}
