@@ -15,20 +15,20 @@ func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore tr
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "AvailabilityIntervals",
-			Transformer: transformer.TransformFunc(AvailabilityIntervals),
 			Reader:      transformer.ReadExcludingRanges(tracesStore, excludeRangesStore),
+			Transformer: transformer.TransformFunc(AvailabilityIntervals),
 			Writer:      intervalsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "ConsolidateAvailabilityIntervals",
-			Transformer: transformer.TransformFunc(ConsolidateAvailabilityIntervals),
 			Reader:      intervalsStore,
+			Transformer: transformer.TransformFunc(ConsolidateAvailabilityIntervals),
 			Writer:      transformer.TruncateBeforeWriting(consolidatedStore),
 		},
 		transformer.PipelineStage{
 			Name:        "AvailabilityReducer",
-			Transformer: transformer.TransformFunc(AvailabilityReducer),
 			Reader:      consolidatedStore,
+			Transformer: transformer.TransformFunc(AvailabilityReducer),
 			Writer:      transformer.TruncateBeforeWriting(nodesStore),
 		},
 		transformer.PipelineStage{
@@ -38,8 +38,8 @@ func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore tr
 		},
 		transformer.PipelineStage{
 			Name:        "GenerateExcludedRanges",
-			Transformer: transformer.MakeMapFunc(GenerateExcludedRanges, workers),
 			Reader:      consolidatedStore,
+			Transformer: transformer.MakeMapFunc(GenerateExcludedRanges, workers),
 			Writer:      transformer.TruncateBeforeWriting(excludeRangesStore),
 		},
 	}

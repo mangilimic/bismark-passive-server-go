@@ -13,14 +13,14 @@ func AggregateStatisticsPipeline(tracesStore transformer.StoreSeeker, traceAggre
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "AggregateStatisticsMapper",
-			Transformer: transformer.MakeMapFunc(AggregateStatisticsMapper, workers),
 			Reader:      transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore),
+			Transformer: transformer.MakeMapFunc(AggregateStatisticsMapper, workers),
 			Writer:      transformer.TruncateBeforeWriting(traceAggregatesStore),
 		},
 		transformer.PipelineStage{
 			Name:        "AggregateStatisticsReducer",
-			Transformer: transformer.TransformFunc(AggregateStatisticsReducer),
 			Reader:      transformer.NewDemuxStoreReader(traceAggregatesStore, nodeAggregatesStore),
+			Transformer: transformer.TransformFunc(AggregateStatisticsReducer),
 			Writer:      nodeAggregatesStore,
 		},
 		transformer.PipelineStage{
