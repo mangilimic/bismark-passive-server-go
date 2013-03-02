@@ -9,21 +9,21 @@ import (
 	"time"
 )
 
-func BytesPerMinutePipeline(tracesStore transformer.StoreReader, mappedStore transformer.Datastore, bytesPerMinuteStore transformer.StoreWriter, workers int) []transformer.PipelineStage {
-	return []transformer.PipelineStage{
+func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore transformer.Datastore, bytesPerMinuteStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
+			Reader:      transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore),
 			Transformer: transformer.MakeDoTransformer(BytesPerMinuteMapper(transformer.NewNonce()), workers),
-			Reader:      tracesStore,
 			Writer:      mappedStore,
 		},
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteReducer",
-			Transformer: transformer.TransformFunc(BytesPerMinuteReducer),
 			Reader:      mappedStore,
+			Transformer: transformer.TransformFunc(BytesPerMinuteReducer),
 			Writer:      bytesPerMinuteStore,
 		},
-	}
+	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
 type BytesPerMinuteMapper transformer.Nonce
@@ -60,14 +60,12 @@ func BytesPerMinuteReducer(inputChan, outputChan chan *transformer.LevelDbRecord
 		var timestamp int64
 		key.DecodeOrDie(record.Key, &node, &timestamp)
 
-		if currentNode == nil || currentTimestamp < 0 {
-			currentNode = node
-			currentTimestamp = timestamp
-		}
 		if !bytes.Equal(node, currentNode) || timestamp != currentTimestamp {
-			outputChan <- &transformer.LevelDbRecord{
-				Key:   key.EncodeOrDie(currentNode, currentTimestamp),
-				Value: key.EncodeOrDie(currentSize),
+			if currentNode != nil && timestamp >= 0 {
+				outputChan <- &transformer.LevelDbRecord{
+					Key:   key.EncodeOrDie(currentNode, currentTimestamp),
+					Value: key.EncodeOrDie(currentSize),
+				}
 			}
 			currentNode = node
 			currentTimestamp = timestamp

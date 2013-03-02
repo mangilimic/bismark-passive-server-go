@@ -1,11 +1,10 @@
 package passive
 
 import (
-	"bytes"
 	"code.google.com/p/goprotobuf/proto"
+	"fmt"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"testing"
 	"time"
 )
 
@@ -16,40 +15,45 @@ func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
 	}
 }
 
-func runBytesPerMinutePipeline(t *testing.T, traces map[string]Trace, expectedOutput []transformer.LevelDbRecord) {
+func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
+	bytesPerMinuteStore := transformer.SliceStore{}
 	tracesStore := transformer.SliceStore{}
 	mappedStore := transformer.SliceStore{}
-	bytesPerMinuteStore := transformer.SliceStore{}
-	for encodedKey, trace := range traces {
-		encodedTrace, err := proto.Marshal(&trace)
-		if err != nil {
-			t.Fatalf("Error encoding protocol buffer: %v", err)
+	traceKeyRangesStore := transformer.SliceStore{}
+	consolidatedTraceKeyRangesStore := transformer.SliceStore{}
+
+	for _, traces := range allTraces {
+		tracesStore.BeginWriting()
+		for encodedKey, trace := range traces {
+			encodedTrace, err := proto.Marshal(&trace)
+			if err != nil {
+				panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
+			}
+			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 		}
-		tracesStore = append(tracesStore, &transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		tracesStore.EndWriting()
+		transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
 	}
 
-	transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, 1), 0)
-	actualOutput := make(chan *transformer.LevelDbRecord, 100)
-	if err := bytesPerMinuteStore.Read(actualOutput); err != nil {
-		t.Fatalf("Error reading output: %v", err)
+	bytesPerMinuteStore.BeginReading()
+	for {
+		record, err := bytesPerMinuteStore.ReadRecord()
+		if err != nil {
+			panic(err)
+		}
+		if record == nil {
+			break
+		}
+		var nodeId string
+		var timestamp, count int64
+		key.DecodeOrDie(record.Key, &nodeId, &timestamp)
+		key.DecodeOrDie(record.Value, &count)
+		fmt.Printf("%s,%d: %d\n", nodeId, timestamp, count)
 	}
-	idx := 0
-	for actualRecord := range actualOutput {
-		if len(expectedOutput) <= idx {
-			t.Fatalf("Got extra record %s: %s", actualRecord.Key, actualRecord.Value)
-		}
-		expectedRecord := expectedOutput[idx]
-		if !bytes.Equal(expectedRecord.Key, actualRecord.Key) {
-			t.Fatalf("Expected key: %s, Got: %s", expectedRecord.Key, actualRecord.Key)
-		}
-		if !bytes.Equal(expectedRecord.Value, actualRecord.Value) {
-			t.Fatalf("Expected value: %s, Got: %s", expectedRecord.Value, actualRecord.Value)
-		}
-		idx++
-	}
+	bytesPerMinuteStore.EndReading()
 }
 
-func TestBytesPerMinute_simple(t *testing.T) {
+func ExampleBytesPerMinute_simple() {
 	trace1 := Trace{}
 	trace1.PacketSeries = make([]*PacketSeriesEntry, 2)
 	trace1.PacketSeries[0] = makePacketSeriesEntry(10, 20)
@@ -62,16 +66,13 @@ func TestBytesPerMinute_simple(t *testing.T) {
 		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
 		string(key.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
 	}
-	expectedOutput := []transformer.LevelDbRecord{
-		transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie("node0", int64(0)),
-			Value: key.EncodeOrDie(int64(200)),
-		},
-	}
-	runBytesPerMinutePipeline(t, records, expectedOutput)
+	runBytesPerMinutePipeline(records)
+
+	// Output:
+	// node0,0: 200
 }
 
-func TestBytesPerMinute_twoMinutes(t *testing.T) {
+func ExampleBytesPerMinute_twoMinutes() {
 	trace1 := Trace{}
 	trace1.PacketSeries = make([]*PacketSeriesEntry, 2)
 	trace1.PacketSeries[0] = makePacketSeriesEntry(10*int64(time.Second/time.Microsecond), 20)
@@ -84,20 +85,14 @@ func TestBytesPerMinute_twoMinutes(t *testing.T) {
 		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
 		string(key.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
 	}
-	expectedOutput := []transformer.LevelDbRecord{
-		transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie("node0", int64(0)),
-			Value: key.EncodeOrDie(int64(120)),
-		},
-		transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie("node0", int64(60)),
-			Value: key.EncodeOrDie(int64(80)),
-		},
-	}
-	runBytesPerMinutePipeline(t, records, expectedOutput)
+	runBytesPerMinutePipeline(records)
+
+	// Output:
+	// node0,0: 120
+	// node0,60: 80
 }
 
-func TestBytesPerMinute_multipleSessions(t *testing.T) {
+func ExampleBytesPerMinute_multipleSessions() {
 	trace1 := Trace{}
 	trace1.PacketSeries = make([]*PacketSeriesEntry, 1)
 	trace1.PacketSeries[0] = makePacketSeriesEntry(0, 20)
@@ -106,16 +101,13 @@ func TestBytesPerMinute_multipleSessions(t *testing.T) {
 		string(key.EncodeOrDie("node0", "anon0", "session1", int32(0))): trace1,
 		string(key.EncodeOrDie("node0", "anon1", "session0", int32(0))): trace1,
 	}
-	expectedOutput := []transformer.LevelDbRecord{
-		transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie("node0", int64(0)),
-			Value: key.EncodeOrDie(int64(60)),
-		},
-	}
-	runBytesPerMinutePipeline(t, records, expectedOutput)
+	runBytesPerMinutePipeline(records)
+
+	// Output:
+	// node0,0: 60
 }
 
-func TestBytesPerMinute_multipleNodes(t *testing.T) {
+func ExampleBytesPerMinute_multipleNodes() {
 	trace1 := Trace{}
 	trace1.PacketSeries = make([]*PacketSeriesEntry, 1)
 	trace1.PacketSeries[0] = makePacketSeriesEntry(0, 20)
@@ -123,15 +115,41 @@ func TestBytesPerMinute_multipleNodes(t *testing.T) {
 		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
 		string(key.EncodeOrDie("node1", "anon0", "session0", int32(0))): trace1,
 	}
-	expectedOutput := []transformer.LevelDbRecord{
-		transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie("node0", int64(0)),
-			Value: key.EncodeOrDie(int64(20)),
-		},
-		transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie("node1", int64(0)),
-			Value: key.EncodeOrDie(int64(20)),
-		},
+	runBytesPerMinutePipeline(records)
+
+	// Output:
+	// node0,0: 20
+	// node1,0: 20
+}
+
+func ExampleBytesPerMinute_multipleRuns() {
+	trace1 := Trace{}
+	trace1.PacketSeries = make([]*PacketSeriesEntry, 2)
+	trace1.PacketSeries[0] = makePacketSeriesEntry(10, 20)
+	trace1.PacketSeries[1] = makePacketSeriesEntry(30, 40)
+	trace2 := Trace{}
+	trace2.PacketSeries = make([]*PacketSeriesEntry, 2)
+	trace2.PacketSeries[0] = makePacketSeriesEntry(50, 60)
+	trace2.PacketSeries[1] = makePacketSeriesEntry(70, 80)
+	trace3 := Trace{}
+	trace3.PacketSeries = make([]*PacketSeriesEntry, 2)
+	trace3.PacketSeries[0] = makePacketSeriesEntry(10*int64(time.Second/time.Microsecond), 20)
+	trace3.PacketSeries[1] = makePacketSeriesEntry(30*int64(time.Second/time.Microsecond), 40)
+	trace4 := Trace{}
+	trace4.PacketSeries = make([]*PacketSeriesEntry, 2)
+	trace4.PacketSeries[0] = makePacketSeriesEntry(50*int64(time.Second/time.Microsecond), 60)
+	trace4.PacketSeries[1] = makePacketSeriesEntry(70*int64(time.Second/time.Microsecond), 80)
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
+		string(key.EncodeOrDie("node0", "anon0", "session0", int32(2))): trace3,
 	}
-	runBytesPerMinutePipeline(t, records, expectedOutput)
+	moreRecords := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
+		string(key.EncodeOrDie("node0", "anon0", "session0", int32(3))): trace4,
+	}
+	runBytesPerMinutePipeline(records, moreRecords)
+
+	// Output:
+	// node0,0: 320
+	// node0,60: 80
 }

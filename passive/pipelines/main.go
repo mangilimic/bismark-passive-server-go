@@ -42,8 +42,10 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 	case "bytesperminute":
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
 		mappedStore := transformer.NewLevelDbStore(dbPath("bytesperminute-mapped"))
+        traceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges"))
+        consolidatedTraceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges"))
 		bytesPerMinuteStore := transformer.NewLevelDbStore(dbPath("bytesperminute"))
-		return passive.BytesPerMinutePipeline(tracesStore, mappedStore, bytesPerMinuteStore, workers)
+		return passive.BytesPerMinutePipeline(tracesStore, mappedStore, bytesPerMinuteStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore, workers)
 	case "filter":
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
