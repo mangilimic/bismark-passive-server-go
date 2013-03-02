@@ -18,26 +18,11 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 	}
 	switch pipelineName {
 	case "availability":
-		excludeRangesStore := transformer.NewLevelDbStore(
-			dbPath("availability-done"),
-			transformer.ReadAllRecords,
-			transformer.WriteAllRecordsDeletingFirst)
-		tracesStore := transformer.NewLevelDbStore(
-			dbPath("traces"),
-			transformer.ReadRecordsExcludingRanges(excludeRangesStore),
-			nil)
-		intervalsStore := transformer.NewLevelDbStore(
-			dbPath("availability-intervals"),
-			transformer.ReadAllRecords,
-			transformer.WriteAllRecords)
-		consolidatedStore := transformer.NewLevelDbStore(
-			dbPath("availability-consolidated"),
-			transformer.ReadAllRecords,
-			transformer.WriteAllRecordsDeletingFirst)
-		nodesStore := transformer.NewLevelDbStore(
-			dbPath("availability-nodes"),
-			transformer.ReadAllRecords,
-			transformer.WriteAllRecords)
+		excludeRangesStore := transformer.NewLevelDbStore(dbPath("availability-done"))
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
+		intervalsStore := transformer.NewLevelDbStore(dbPath("availability-intervals"))
+		consolidatedStore := transformer.NewLevelDbStore(dbPath("availability-consolidated"))
+		nodesStore := transformer.NewLevelDbStore(dbPath("availability-nodes"))
 		flagset := flag.NewFlagSet("availability", flag.ExitOnError)
 		jsonOutput := flagset.String("json_output", "/dev/null", "Write availiability in JSON format to this file.")
 		flagset.Parse(flag.Args()[2:])
@@ -55,9 +40,9 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			time.Now().Unix(),
 			workers)
 	case "bytesperminute":
-		tracesStore := transformer.NewLevelDbStore(dbPath("traces"), transformer.ReadAllRecords, nil)
-		mappedStore := transformer.NewLevelDbStore(dbPath("bytesperminute-mapped"), transformer.ReadAllRecords, transformer.WriteAllRecords)
-		bytesPerMinuteStore := transformer.NewLevelDbStore(dbPath("bytesperminute"), nil, transformer.WriteAllRecords)
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
+		mappedStore := transformer.NewLevelDbStore(dbPath("bytesperminute-mapped"))
+		bytesPerMinuteStore := transformer.NewLevelDbStore(dbPath("bytesperminute"))
 		return passive.BytesPerMinutePipeline(tracesStore, mappedStore, bytesPerMinuteStore, workers)
 	case "filter":
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
@@ -67,9 +52,9 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		flagset.Parse(flag.Args()[2:])
 		return passive.FilterTracesPipeline(dbRoot, *nodeId, *sessionStartDate, *sessionEndDate, workers)
 	case "index":
-		tarnamesStore := transformer.NewLevelDbStore(dbPath("tarnames"), transformer.ReadAllRecords, nil)
-		tarnamesIndexedStore := transformer.NewLevelDbStore(dbPath("tarnames-indexed"), transformer.ReadAllRecords, transformer.WriteAllRecords)
-		tracesStore := transformer.NewLevelDbStore(dbPath("traces"), nil, transformer.WriteAllRecords)
+		tarnamesStore := transformer.NewLevelDbStore(dbPath("tarnames"))
+		tarnamesIndexedStore := transformer.NewLevelDbStore(dbPath("tarnames-indexed"))
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
 		return []transformer.PipelineStage{
 			transformer.PipelineStage{
 				Name:        "ParseTraces",
@@ -78,6 +63,27 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 				Writer:      transformer.NewMuxedStoreWriter(tracesStore, tarnamesIndexedStore),
 			},
 		}
+    case "statistics":
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
+        traceAggregatesStore := transformer.NewLevelDbStore(dbPath("statistics-trace-aggregates"))
+        nodeAggregatesStore := transformer.NewLevelDbStore(dbPath("statistics-node-aggregates"))
+        traceKeyRangesStore := transformer.NewLevelDbStore(dbPath("statistics-trace-key-ranges"))
+        consolidatedTraceKeyRangesStore := transformer.NewLevelDbStore(dbPath("statistics-consolidated-trace-key-ranges"))
+		flagset := flag.NewFlagSet("statistics", flag.ExitOnError)
+		jsonOutput := flagset.String("json_output", "/dev/null", "Write statistics in JSON format to this file.")
+		flagset.Parse(flag.Args()[2:])
+		jsonHandle, err := os.Create(*jsonOutput)
+		if err != nil {
+			log.Fatalf("Error opening JSON output: %v", err)
+		}
+        return passive.AggregateStatisticsPipeline(
+            tracesStore,
+            traceAggregatesStore,
+            nodeAggregatesStore,
+            jsonHandle,
+            traceKeyRangesStore,
+            consolidatedTraceKeyRangesStore,
+            workers)
 	//case "bytesperdevice":
 	//	return []passive.PipelineStage{
 	//		passive.PipelineStage{
