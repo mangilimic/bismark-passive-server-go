@@ -28,79 +28,38 @@ func makeTraceWithStatistics(nodeId string, packetSizes []int, packetsDropped, p
 	return trace
 }
 
-func runAggregateStatisticsPipeline(traces []*Trace) {
+func runAggregateStatisticsPipeline(allTraces ...[]*Trace) {
 	tracesStore := transformer.SliceStore{}
-	tracesStore.BeginWriting()
-	for idx, trace := range traces {
-		traceKey := TraceKey{
-			NodeId:               []byte(*trace.NodeId),
-			AnonymizationContext: []byte("context"),
-			SessionId:            0,
-			SequenceNumber:       int32(idx),
-		}
-		encodedKey := EncodeTraceKey(&traceKey)
-		encodedTrace, err := proto.Marshal(trace)
-		if err != nil {
-			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
-		}
-		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: encodedKey, Value: encodedTrace})
-	}
-	tracesStore.EndWriting()
-
 	traceAggregatesStore := transformer.SliceStore{}
 	nodeAggregatesStore := transformer.SliceStore{}
-	writer := bytes.NewBuffer([]byte{})
+	var writer *bytes.Buffer
 	traceKeyRangesStore := transformer.SliceStore{}
 	consolidatedTraceKeyRangesStore := transformer.SliceStore{}
-	transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &traceAggregatesStore, &nodeAggregatesStore, writer, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+	sequenceNumber := int32(0)
+	for _, traces := range allTraces {
+		tracesStore.BeginWriting()
+		for _, trace := range traces {
+			traceKey := TraceKey{
+				NodeId:               []byte(*trace.NodeId),
+				AnonymizationContext: []byte("context"),
+				SessionId:            0,
+				SequenceNumber:       sequenceNumber,
+			}
+			encodedKey := EncodeTraceKey(&traceKey)
+			encodedTrace, err := proto.Marshal(trace)
+			if err != nil {
+				panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
+			}
+			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: encodedKey, Value: encodedTrace})
+			sequenceNumber++
+		}
+		tracesStore.EndWriting()
+
+		writer = bytes.NewBuffer([]byte{})
+
+		transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &traceAggregatesStore, &nodeAggregatesStore, writer, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+	}
 	fmt.Printf("%s", writer.Bytes())
-}
-
-func runAggregateStatisticsPipelineMultiple(traces, moreTraces []*Trace) {
-	tracesStore := transformer.SliceStore{}
-	tracesStore.BeginWriting()
-	for idx, trace := range traces {
-		traceKey := TraceKey{
-			NodeId:               []byte(*trace.NodeId),
-			AnonymizationContext: []byte("context"),
-			SessionId:            0,
-			SequenceNumber:       int32(idx),
-		}
-		encodedKey := EncodeTraceKey(&traceKey)
-		encodedTrace, err := proto.Marshal(trace)
-		if err != nil {
-			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
-		}
-		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: encodedKey, Value: encodedTrace})
-	}
-	tracesStore.EndWriting()
-
-	traceAggregatesStore := transformer.SliceStore{}
-	nodeAggregatesStore := transformer.SliceStore{}
-	writer := bytes.NewBuffer([]byte{})
-	traceKeyRangesStore := transformer.SliceStore{}
-	consolidatedTraceKeyRangesStore := transformer.SliceStore{}
-	transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &traceAggregatesStore, &nodeAggregatesStore, writer, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
-
-	tracesStore.BeginWriting()
-	for idx, trace := range moreTraces {
-		traceKey := TraceKey{
-			NodeId:               []byte(*trace.NodeId),
-			AnonymizationContext: []byte("context"),
-			SessionId:            0,
-			SequenceNumber:       int32(idx + len(traces)),
-		}
-		encodedKey := EncodeTraceKey(&traceKey)
-		encodedTrace, err := proto.Marshal(trace)
-		if err != nil {
-			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
-		}
-		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: encodedKey, Value: encodedTrace})
-	}
-	tracesStore.EndWriting()
-	anotherWriter := bytes.NewBuffer([]byte{})
-	transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &traceAggregatesStore, &nodeAggregatesStore, anotherWriter, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
-	fmt.Printf("%s", anotherWriter.Bytes())
 }
 
 func ExampleAggregateStatisticsPipeline() {
@@ -127,7 +86,7 @@ func ExampleAggregateStatisticsPipeline_multipleNodes() {
 }
 
 func ExampleAggregateStatisticsPipeline_multipleRuns() {
-	runAggregateStatisticsPipelineMultiple([]*Trace{
+	runAggregateStatisticsPipeline([]*Trace{
 		makeTraceWithStatistics("node", []int{2, 2, 2}, 1, 0, 0, 2, 3),
 		makeTraceWithStatistics("node", []int{1, 2}, 0, 1, 0, 3, 4),
 	}, []*Trace{
