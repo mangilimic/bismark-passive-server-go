@@ -45,14 +45,39 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
         traceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges"))
         consolidatedTraceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges"))
 		bytesPerMinuteStore := transformer.NewLevelDbStore(dbPath("bytesperminute"))
-		return passive.BytesPerMinutePipeline(tracesStore, mappedStore, bytesPerMinuteStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore, workers)
-	case "filter":
+		bytesPerHourStore := transformer.NewLevelDbStore(dbPath("bytesperhour"))
+		return passive.BytesPerMinutePipeline(tracesStore, mappedStore, bytesPerMinuteStore, bytesPerHourStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore, workers)
+	case "filternode":
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
+		flagset.Parse(flag.Args()[2:])
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
+        filteredStore := transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s", *nodeId)))
+        return []transformer.PipelineStage{
+            transformer.PipelineStage{
+                Name: "FilterNode",
+                Reader: passive.IncludeNodes(tracesStore, *nodeId),
+                Writer: filteredStore,
+            },
+        }
+    case "filterdates":
+		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		sessionStartDate := flagset.String("session_start_date", "20120301", "Retain only session starting after this date, in YYYYMMDD format.")
 		sessionEndDate := flagset.String("session_end_date", "20120401", "Retain only session starting before this date, in YYYYMMDD format.")
 		flagset.Parse(flag.Args()[2:])
-		return passive.FilterTracesPipeline(dbRoot, *nodeId, *sessionStartDate, *sessionEndDate, workers)
+        timeFormatString := "20060102"
+        sessionStartTime, err := time.Parse(timeFormatString, *sessionStartDate)
+        if err != nil {
+            panic(fmt.Errorf("Error parsing start date %s: %v", sessionStartDate, err))
+        }
+        sessionEndTime, err := time.Parse(timeFormatString, *sessionEndDate)
+        if err != nil {
+            panic(fmt.Errorf("Error parsing end date %s: %v", sessionEndDate, err))
+        }
+		availabilityRangesStore := transformer.NewLevelDbStore(dbPath("availability-done"))
+		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
+        filteredStore := transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s-%s", *sessionStartDate, *sessionEndDate)))
+		return passive.FilterSessionsPipeline(sessionStartTime.Unix(), sessionEndTime.Unix(), tracesStore, availabilityRangesStore, filteredStore)
 	case "index":
 		tarnamesStore := transformer.NewLevelDbStore(dbPath("tarnames"))
 		tarnamesIndexedStore := transformer.NewLevelDbStore(dbPath("tarnames-indexed"))
