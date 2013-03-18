@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	//"log"
 )
 
 func runBytesPerDevicePipeline(consistentRanges []*transformer.LevelDbRecord, allTraces ...map[string]Trace) {
