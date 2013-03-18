@@ -11,7 +11,7 @@ import (
 	"log"
 )
 
-func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore transformer.Datastore, consolidatedStore, nodesStore transformer.DatastoreFull, jsonWriter io.Writer, excludeRangesStore transformer.DatastoreFull, timestamp int64, workers int) []transformer.PipelineStage {
+func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore transformer.Datastore, consolidatedStore, nodesStore transformer.DatastoreFull, jsonWriter io.Writer, excludeRangesStore transformer.DatastoreFull, consistentRangesStore transformer.StoreDeleter, timestamp int64, workers int) []transformer.PipelineStage {
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "AvailabilityIntervals",
@@ -41,6 +41,12 @@ func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore tr
 			Reader:      consolidatedStore,
 			Transformer: transformer.MakeMapFunc(GenerateExcludedRanges, workers),
 			Writer:      transformer.TruncateBeforeWriting(excludeRangesStore),
+		},
+		transformer.PipelineStage{
+			Name:        "GenerateConsistentRanges",
+			Reader:      excludeRangesStore,
+			Transformer: transformer.MakeDoFunc(GenerateConsistentRanges, workers),
+			Writer:      transformer.TruncateBeforeWriting(consistentRangesStore),
 		},
 	}
 }
@@ -269,4 +275,12 @@ func GenerateExcludedRanges(record *transformer.LevelDbRecord) *transformer.Leve
 		Key:   EncodeTraceKey(&newKey),
 		Value: EncodeTraceKey(&newValue),
 	}
+}
+
+func GenerateConsistentRanges(record *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
+	intervalStartKey := DecodeTraceKey(record.Key)
+	if intervalStartKey.SequenceNumber != 0 {
+		return
+	}
+	outputChan <- record
 }
