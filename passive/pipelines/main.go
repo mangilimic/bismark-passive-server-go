@@ -41,6 +41,20 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			consistentRangesStore,
 			time.Now().Unix(),
 			workers)
+	case "bytesperdevice":
+		return passive.BytesPerDevicePipeline(
+			transformer.NewLevelDbStore(dbPath("traces")),
+			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-address-table")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-table")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-packets")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-id-to-mac")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-id-to-macs")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-unreduced")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice")),
+			transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges")),
+			transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges")),
+			workers)
 	case "bytesperminute":
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
 		mappedStore := transformer.NewLevelDbStore(dbPath("bytesperminute-mapped"))
@@ -113,33 +127,6 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			traceKeyRangesStore,
 			consolidatedTraceKeyRangesStore,
 			workers)
-	//case "bytesperdevice":
-	//	return []passive.PipelineStage{
-	//		passive.PipelineStage{
-	//			Transformer: passive.TransformerFunc(passive.MapFromTrace),
-	//			InputDb: "index.leveldb",
-	//			InputTable: "trace_data",
-	//			OutputDb: "bytes_per_device.leveldb",
-	//		},
-	//		passive.PipelineStage{
-	//			Transformer: passive.TransformerFunc(passive.JoinMacAndFlowId),
-	//			InputDb: "bytes_per_device.leveldb",
-	//			InputTable: "ip_to_mac_and_flow",
-	//			OutputDb: "bytes_per_device.leveldb",
-	//		},
-	//		passive.PipelineStage{
-	//			Transformer: passive.TransformerFunc(passive.JoinMacAndTimestamp),
-	//			InputDb: "bytes_per_device.leveldb",
-	//			InputTable: "flow_to_bytes_and_mac",
-	//			OutputDb: "bytes_per_device.leveldb",
-	//		},
-	//		passive.PipelineStage{
-	//			Transformer: passive.TransformerFunc(passive.BytesPerDeviceReduce),
-	//			InputDb: "bytes_per_device.leveldb",
-	//			InputTable: "bytes_per_device_with_nonce",
-	//			OutputDb: "bytes_per_device.leveldb",
-	//		},
-	//	}
 	default:
 		flag.Usage()
 		log.Fatalf("Invalid pipeline.")
