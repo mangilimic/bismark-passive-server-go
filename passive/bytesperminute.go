@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore transformer.Datastore, bytesPerMinuteStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, bytesPerMinuteStore transformer.Datastore, bytesPerHourStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
@@ -22,6 +22,12 @@ func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore tra
 			Reader:      mappedStore,
 			Transformer: transformer.TransformFunc(BytesPerMinuteReducer),
 			Writer:      bytesPerMinuteStore,
+		},
+		transformer.PipelineStage{
+			Name:        "BytesPerHourReducer",
+			Reader:      bytesPerMinuteStore,
+			Transformer: transformer.TransformFunc(BytesPerHourReducer),
+			Writer:      bytesPerHourStore,
 		},
 	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
@@ -79,6 +85,47 @@ func BytesPerMinuteReducer(inputChan, outputChan chan *transformer.LevelDbRecord
 	if currentNode != nil && currentTimestamp >= 0 {
 		outputChan <- &transformer.LevelDbRecord{
 			Key:   key.EncodeOrDie(currentNode, currentTimestamp),
+			Value: key.EncodeOrDie(currentSize),
+		}
+	}
+	close(outputChan)
+}
+
+func getHour(timestamp int64) int64 {
+	t := time.Unix(timestamp, 0)
+	hour := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), 0, 0, 0, time.UTC)
+	return hour.Unix()
+}
+
+func BytesPerHourReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	var currentNode []byte
+	currentHour := int64(-1)
+	var currentSize int64
+	for record := range inputChan {
+		var node []byte
+		var timestamp int64
+		key.DecodeOrDie(record.Key, &node, &timestamp)
+		hour := getHour(timestamp)
+
+		if !bytes.Equal(node, currentNode) || hour != currentHour {
+			if currentNode != nil && currentHour >= 0 {
+				outputChan <- &transformer.LevelDbRecord{
+					Key:   key.EncodeOrDie(currentNode, currentHour),
+					Value: key.EncodeOrDie(currentSize),
+				}
+			}
+			currentNode = node
+			currentHour = hour
+			currentSize = 0
+		}
+
+		var value int64
+		key.DecodeOrDie(record.Value, &value)
+		currentSize += value
+	}
+	if currentNode != nil && currentHour >= 0 {
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie(currentNode, currentHour),
 			Value: key.EncodeOrDie(currentSize),
 		}
 	}
