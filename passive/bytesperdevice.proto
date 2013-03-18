@@ -1,0 +1,10 @@
+package passive;
+
+message BytesPerTimestampEntry {
+    optional int64 timestamp = 1;
+    optional int64 size = 2;
+}
+
+message BytesPerTimestamp {
+    repeated BytesPerTimestampEntry entry = 1;
+}
