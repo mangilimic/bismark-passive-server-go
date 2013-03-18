@@ -3,7 +3,13 @@ package passive
 import (
 	"fmt"
 	"github.com/sburnett/transformer"
+	"io/ioutil"
+	"log"
 )
+
+func init() {
+	log.SetOutput(ioutil.Discard)
+}
 
 func makeTraceKey(nodeId, anonymizationContext string, sessionId, sequenceNumber int) *transformer.LevelDbRecord {
 	traceKey := TraceKey{
