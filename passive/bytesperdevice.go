@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"log"
 	"time"
 )
 
@@ -115,7 +114,6 @@ func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan ch
 			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber),
 			Value: encodedBytesPerTimestamp,
 		}
-		log.Printf("Emitting to bucket: %s,%s,%d,%d,%d", traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber)
 	}
 }
 
@@ -226,7 +224,7 @@ func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
 
 		bytesPerTimestamp := BytesPerTimestamp{}
 		if err := proto.Unmarshal(record.Value, &bytesPerTimestamp); err != nil {
-			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
+			panic(fmt.Errorf("Error ummarshaling protocol buffer: %v", err))
 		}
 
 		for _, currentMacAddress := range currentMacAddresses {
@@ -273,7 +271,6 @@ func ReduceBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord)
 		var size int64
 		key.DecodeOrDie(record.Value, &size)
 		currentSize += size
-		log.Printf("Reducing: %s,%s,%d: %v", nodeId, macAddress, timestamp, size)
 	}
 	if currentNodeId != nil && currentMacAddress != nil && currentTimestamp >= 0 {
 		emitReducedBucket(currentNodeId, currentMacAddress, currentTimestamp, currentSize)
