@@ -38,13 +38,18 @@ type SessionKey struct {
 	SessionId            int64
 }
 
-func DecodeSessionKey(encodedKey []byte) *SessionKey {
+func DecodeSessionKeyWithRemainder(encodedKey []byte) (*SessionKey, []byte) {
 	decodedKey := new(SessionKey)
-	key.DecodeOrDie(
+	remainder := key.DecodeOrDie(
 		encodedKey,
 		&decodedKey.NodeId,
 		&decodedKey.AnonymizationContext,
 		&decodedKey.SessionId)
+	return decodedKey, remainder
+}
+
+func DecodeSessionKey(encodedKey []byte) *SessionKey {
+	decodedKey, _ := DecodeSessionKeyWithRemainder(encodedKey)
 	return decodedKey
 }
 

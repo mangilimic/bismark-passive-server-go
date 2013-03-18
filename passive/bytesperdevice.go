@@ -1,265 +1,282 @@
 package passive
 
-//import (
-//	"bytes"
-//	"code.google.com/p/goprotobuf/proto"
-//	"log"
-//	"time"
-//)
-//
-//type FlowTimestamp struct {
-//	flowId    int32
-//	timestamp int64
-//}
-//
-//type UnionTag []byte
-//
-//var UnionFirst = UnionTag("1")
-//var UnionSecond = UnionTag("2")
-//var UnionThird = UnionTag("3")
-//
-//// Input: A table mapping
-//// node_id:anonymization_context:session_id:sequence_number to traces
-//// Output: Three tables:
-//// 1. A mapping from IP addresses to MAC addresses in each trace's address
-//// table. We emit one record per table entry, so there can be several records
-//// per trace.
-//// 2. A mapping from IP addresses to flow IDs for each flow in each trace's flow
-//// table. Again, we can emit multiple records per trace.
-//// 3. A mapping from flow IDs and rounded timestamps to a byte count.
-//func MapFromTrace(inputChan, outputChan chan *LevelDbRecord) {
-//	var currentSession []byte
-//	var expectedSequenceNumber int32
-//	for record := range inputChan {
-//		key := parseKey(record.Key) // input_table:node_id:anonymization_context:session_id:sequence_number
-//		if len(key) != 5 {
-//			log.Fatalf("Invalid length for key %q", record.Key)
-//		}
-//
-//		session := bytes.Join(key[1:4], []byte(":"))
-//		if !bytes.Equal(currentSession, session) {
-//			currentSession = session
-//			expectedSequenceNumber = 0
-//		}
-//		sequenceNumber, err := decodeLexicographicInt32(key[4])
-//		if err != nil {
-//			log.Fatalf("Error decoding sequence number: %v", err)
-//		}
-//		if sequenceNumber != expectedSequenceNumber {
-//			log.Printf("Expected sequence number %v; got %v instead", expectedSequenceNumber, sequenceNumber)
-//			continue
-//		}
-//		expectedSequenceNumber++
-//
-//		trace := Trace{}
-//		if err := proto.Unmarshal(record.Value, &trace); err != nil {
-//			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
-//		}
-//
-//		for _, addressTableEntry := range trace.AddressTableEntry {
-//			if addressTableEntry.IpAddress == nil || addressTableEntry.MacAddress == nil {
-//				continue
-//			}
-//			outputChan <- &LevelDbRecord{
-//				Key:   makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*addressTableEntry.IpAddress), key[4], UnionFirst),
-//				Value: []byte(*addressTableEntry.MacAddress),
-//			}
-//		}
-//
-//		for _, flowTableEntry := range trace.FlowTableEntry {
-//			if flowTableEntry.FlowId == nil {
-//				continue
-//			}
-//			if flowTableEntry.SourceIp != nil {
-//				outputChan <- &LevelDbRecord{
-//					Key:   makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.SourceIp), key[4], UnionSecond),
-//					Value: encodeInt64(int64(*flowTableEntry.FlowId)),
-//				}
-//			}
-//			if flowTableEntry.DestinationIp != nil {
-//				outputChan <- &LevelDbRecord{
-//					Key:   makeKey("ip_to_mac_and_flow", key[1], key[2], key[3], []byte(*flowTableEntry.DestinationIp), key[4], UnionSecond),
-//					Value: encodeInt64(int64(*flowTableEntry.FlowId)),
-//				}
-//			}
-//		}
-//
-//		buckets := make(map[FlowTimestamp]int64)
-//		for _, packetSeriesEntry := range trace.PacketSeries {
-//			if packetSeriesEntry.FlowId == nil || packetSeriesEntry.TimestampMicroseconds == nil || packetSeriesEntry.Size == nil {
-//				continue
-//			}
-//			timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds*1000)
-//			minuteTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), 0, 0, time.UTC)
-//			flowTimestamp := FlowTimestamp{flowId: *packetSeriesEntry.FlowId, timestamp: minuteTimestamp.Unix()}
-//			buckets[flowTimestamp] += int64(*packetSeriesEntry.Size)
-//		}
-//		for flowTimestamp, size := range buckets {
-//			flowIdBytes, err := encodeLexicographicInt32(flowTimestamp.flowId)
-//			if err != nil {
-//				log.Printf("Error encoding flow ID: %v", err)
-//				continue
-//			}
-//			timestampBytes, err := encodeLexicographicInt64(flowTimestamp.timestamp)
-//			if err != nil {
-//				log.Printf("Error encoding timestamp: %v", err)
-//				continue
-//			}
-//			outputChan <- &LevelDbRecord{
-//				Key:   makeKey("flow_to_bytes_and_mac", key[1], key[2], key[3], flowIdBytes, key[4], UnionSecond, timestampBytes),
-//				Value: encodeInt64(size),
-//			}
-//		}
-//	}
-//}
-//
-//func JoinMacAndFlowId(inputChan, outputChan chan *LevelDbRecord) {
-//	var currentIpKey []byte
-//	var currentDestKey []byte
-//	var currentMac []byte
-//	var nonce Nonce
-//	for record := range inputChan {
-//		// The key format is
-//		// input_table:node_id:anonymization_context:session_id:ip:sequence_number:join_tag
-//		// where join_tag is 1 if the value is a MAC address and 2 if the value
-//		// is a flow ID.
-//		key := parseKey(record.Key)
-//		if len(key) != 7 {
-//			log.Fatalf("Invalid length for key %q", record.Key)
-//		}
-//
-//		ipKey := bytes.Join(key[1:5], []byte(":"))   // node_id:anonymization_context:session_id:ip
-//		destKey := bytes.Join(key[1:4], []byte(":")) // node_id:anonymization_context:session_id
-//
-//		if currentIpKey == nil {
-//			currentIpKey = ipKey
-//		}
-//		if currentDestKey == nil {
-//			currentDestKey = destKey
-//		}
-//
-//		if !bytes.Equal(currentIpKey, ipKey) {
-//			currentIpKey = ipKey
-//			currentDestKey = destKey
-//			currentMac = nil // Keys switched to a new IP so the current MAC doesn't correspond with that IP.
-//		}
-//
-//		if bytes.Equal(key[6], UnionFirst) {
-//			currentMac = record.Value
-//		} else if bytes.Equal(key[6], UnionSecond) {
-//			if currentMac != nil {
-//				flowId, err := decodeInt64(record.Value)
-//				if err != nil {
-//					log.Fatalf("Error decoding flow id: %v", err)
-//				}
-//				encodedFlowId, err := encodeLexicographicInt32(int32(flowId))
-//				if err != nil {
-//					log.Fatalf("Error encoding flow id: %v", err)
-//				}
-//				outputChan <- &LevelDbRecord{
-//					Key:   makeKey("flow_to_bytes_and_mac", currentDestKey, encodedFlowId, key[5], UnionFirst, nonce.Next()),
-//					Value: currentMac,
-//				}
-//			}
-//		} else {
-//			log.Fatalf("Invalid tag: %v", key[6])
-//		}
-//	}
-//}
-//
-//func JoinMacAndTimestamp(inputChan, outputChan chan *LevelDbRecord) {
-//	var nonce Nonce
-//	var currentFlowKey []byte
-//	var currentSequenceNumberKey []byte
-//	var currentMacs [][]byte
-//	for record := range inputChan {
-//		// The key format is
-//		// input_table:node_id:anonymization_context:session_id:flow_id:sequence_number:join_tag:timestamp
-//		// where join_tag is 1 if the value is a MAC address and 2 if the value
-//		// is a byte count. Timestamp is only present if join_tag is 2.
-//		key := parseKey(record.Key)
-//		if len(key) != 7 && len(key) != 8 {
-//			log.Fatalf("Invalid length for key %q", record.Key)
-//		}
-//
-//		flowKey := bytes.Join(key[1:5], []byte(":")) // node_id:anonymization_context:session_id:flow_id
-//		if currentFlowKey == nil {
-//			currentFlowKey = flowKey
-//		}
-//		if !bytes.Equal(currentFlowKey, flowKey) {
-//			currentFlowKey = flowKey
-//			currentMacs = [][]byte{} // Key switched to a new flow so we need to discover MACs for the new flow.
-//		}
-//
-//		if bytes.Equal(key[6], UnionFirst) {
-//			sequenceNumberKey := bytes.Join(key[1:6], []byte(":")) // node_id:anonymization_context:session_id:flow_id:sequence_number
-//			if currentSequenceNumberKey == nil {
-//				currentSequenceNumberKey = sequenceNumberKey
-//			}
-//			if bytes.Equal(currentSequenceNumberKey, sequenceNumberKey) {
-//				// Two MACs are mapped to the same flow in the same trace.  We
-//				// assume they correspond to each end of the flow and traffic
-//				// should be attributed to both devices. (e.g., two devices on
-//				// the LAN talking to each other.)
-//				currentMacs = append(currentMacs, record.Value)
-//			} else {
-//				// If two MACs are mapped to the same flow in different traces
-//				// then we assume they correspond to different flows sharing the
-//				// same flow ID (i.e., a new flow), so we only attribute traffic
-//				// to the last seen MAC.
-//				currentSequenceNumberKey = sequenceNumberKey
-//				currentMacs = [][]byte{record.Value}
-//			}
-//		} else if bytes.Equal(key[6], UnionSecond) {
-//			currentNode := key[1]
-//			currentTimestamp := key[7]
-//			for _, currentMac := range currentMacs {
-//				outputChan <- &LevelDbRecord{
-//					Key:   makeKey("bytes_per_device_with_nonce", currentNode, currentMac, currentTimestamp, nonce.Next()),
-//					Value: record.Value,
-//				}
-//			}
-//		} else {
-//			log.Fatalf("Invalid tag: %v", key[7])
-//		}
-//	}
-//}
-//
-//func BytesPerDeviceReduce(inputChan, outputChan chan *LevelDbRecord) {
-//	var currentDestKey []byte
-//	var currentSize int64
-//	for record := range inputChan {
-//		key := parseKey(record.Key)
-//		if len(key) != 5 {
-//			log.Fatalf("Invalid length for key %q", record.Key)
-//		}
-//
-//		destKey := bytes.Join(key[1:4], []byte(":"))
-//
-//		if currentDestKey == nil {
-//			currentDestKey = destKey
-//		}
-//
-//		if !bytes.Equal(currentDestKey, destKey) {
-//			outputChan <- &LevelDbRecord{
-//				Key:   makeKey("bytes_per_device", currentDestKey),
-//				Value: encodeInt64(currentSize),
-//			}
-//			currentDestKey = destKey
-//			currentSize = 0
-//		}
-//
-//		size, err := decodeInt64(record.Value)
-//		if err != nil {
-//			log.Fatalf("Error decoding size: %v", err)
-//		}
-//		currentSize += size
-//	}
-//
-//	if currentDestKey != nil {
-//		outputChan <- &LevelDbRecord{
-//			Key:   makeKey("bytes_per_device", currentDestKey),
-//			Value: encodeInt64(currentSize),
-//		}
-//	}
-//}
+import (
+	"bytes"
+	"code.google.com/p/goprotobuf/proto"
+	"fmt"
+	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
+	"log"
+	"time"
+)
+
+type FlowTimestamp struct {
+	flowId    int32
+	timestamp int64
+}
+
+func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore, bytesPerDeviceUnreducedStore transformer.Datastore, bytesPerDeviceStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+	availableTracesStore := transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore)
+	return append([]transformer.PipelineStage{
+		transformer.PipelineStage{
+			Name:        "BytesPerDeviceMapper",
+			Reader:      transformer.ReadExcludingRanges(availableTracesStore, traceKeyRangesStore),
+			Transformer: transformer.MakeMultipleOutputsDoFunc(BytesPerDeviceMapper, 3, workers),
+			Writer:      transformer.NewMuxedStoreWriter(addressTableStore, flowTableStore, packetsStore),
+		},
+		transformer.PipelineStage{
+			Name:        "JoinMacAndFlowId",
+			Reader:      transformer.NewDemuxStoreReader(addressTableStore, flowTableStore),
+			Transformer: transformer.TransformFunc(JoinMacAndFlowId),
+			Writer:      flowIdToMacStore,
+		},
+		transformer.PipelineStage{
+			Name:        "FlattenMacAddresses",
+			Reader:      flowIdToMacStore,
+			Transformer: transformer.TransformFunc(FlattenMacAddresses),
+			Writer:      flowIdToMacsStore,
+		},
+		transformer.PipelineStage{
+			Name:        "JoinMacAndSizes",
+			Reader:      transformer.NewDemuxStoreReader(flowIdToMacsStore, packetsStore),
+			Transformer: transformer.TransformFunc(JoinMacAndSizes),
+			Writer:      bytesPerDeviceUnreducedStore,
+		},
+		transformer.PipelineStage{
+			Name:        "ReduceBytesPerDevice",
+			Reader:      bytesPerDeviceUnreducedStore,
+			Transformer: transformer.TransformFunc(ReduceBytesPerDevice),
+			Writer:      bytesPerDeviceStore,
+		},
+	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(availableTracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
+}
+
+func MapTraceToAddressTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
+	for _, entry := range trace.AddressTableEntry {
+		if entry.MacAddress == nil || entry.IpAddress == nil {
+			continue
+		}
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.IpAddress, traceKey.SequenceNumber),
+			Value: key.EncodeOrDie(*entry.MacAddress),
+		}
+	}
+}
+
+func MapTraceToFlowTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
+	flowIds := make(map[string][]int32)
+	for _, entry := range trace.FlowTableEntry {
+		if entry.FlowId == nil {
+			continue
+		}
+		if entry.SourceIp != nil {
+			flowIds[string(*entry.SourceIp)] = append(flowIds[string(*entry.SourceIp)], *entry.FlowId)
+		}
+		if entry.DestinationIp != nil {
+			flowIds[string(*entry.DestinationIp)] = append(flowIds[string(*entry.DestinationIp)], *entry.FlowId)
+		}
+	}
+	for ipAddress, ids := range flowIds {
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, ipAddress, traceKey.SequenceNumber),
+			Value: key.EncodeOrDie(ids),
+		}
+	}
+}
+
+func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
+	buckets := make(map[int32]map[int64]int64)
+	for _, packetSeriesEntry := range trace.PacketSeries {
+		if packetSeriesEntry.FlowId == nil || packetSeriesEntry.TimestampMicroseconds == nil || packetSeriesEntry.Size == nil {
+			continue
+		}
+		timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds*1000)
+		minuteTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), 0, 0, time.UTC)
+		if _, ok := buckets[*packetSeriesEntry.FlowId]; !ok {
+			buckets[*packetSeriesEntry.FlowId] = make(map[int64]int64)
+		}
+		buckets[*packetSeriesEntry.FlowId][minuteTimestamp.Unix()] += int64(*packetSeriesEntry.Size)
+	}
+	for flowId, timestampBuckets := range buckets {
+		bytesPerTimestamp := BytesPerTimestamp{}
+		for timestamp, size := range timestampBuckets {
+			entry := BytesPerTimestampEntry{
+				Timestamp: proto.Int64(timestamp),
+				Size:      proto.Int64(size),
+			}
+			bytesPerTimestamp.Entry = append(bytesPerTimestamp.Entry, &entry)
+		}
+		encodedBytesPerTimestamp, err := proto.Marshal(&bytesPerTimestamp)
+		if err != nil {
+			panic(err)
+		}
+
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber),
+			Value: encodedBytesPerTimestamp,
+		}
+		log.Printf("Emitting to bucket: %s,%s,%d,%d,%d", traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber)
+	}
+}
+
+func BytesPerDeviceMapper(record *transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
+	traceKey := DecodeTraceKey(record.Key)
+	var trace Trace
+	if err := proto.Unmarshal(record.Value, &trace); err != nil {
+		panic(err)
+	}
+
+	MapTraceToAddressTable(traceKey, &trace, outputChans[0])
+	MapTraceToFlowTable(traceKey, &trace, outputChans[1])
+	MapTraceToBytesPerTimestamp(traceKey, &trace, outputChans[2])
+}
+
+func JoinMacAndFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	var currentSession, currentMacAddress, currentIpAddress []byte
+	for record := range inputChan {
+		decodedSession, remainder := DecodeSessionKeyWithRemainder(record.Key)
+		session := EncodeSessionKey(decodedSession)
+		var ipAddress []byte
+		var sequenceNumber int32
+		key.DecodeOrDie(remainder, &ipAddress, &sequenceNumber)
+
+		if !bytes.Equal(currentSession, session) || !bytes.Equal(currentIpAddress, ipAddress) {
+			currentSession = session
+			currentIpAddress = nil
+			currentMacAddress = nil
+		}
+
+		if record.DatabaseIndex == 0 {
+			currentIpAddress = ipAddress
+			currentMacAddress = record.Value
+			continue
+		}
+		if currentMacAddress == nil {
+			continue
+		}
+		var flowIds []int32
+		key.DecodeOrDie(record.Value, &flowIds)
+		for _, flowId := range flowIds {
+			outputChan <- &transformer.LevelDbRecord{
+				Key: key.Join(session, key.EncodeOrDie(flowId, sequenceNumber), currentMacAddress),
+			}
+		}
+	}
+	close(outputChan)
+}
+
+func FlattenMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	var currentOutputKey []byte
+	var macAddresses [][]byte
+	for record := range inputChan {
+		decodedSession, remainder := DecodeSessionKeyWithRemainder(record.Key)
+		session := EncodeSessionKey(decodedSession)
+		var flowId, sequenceNumber int32
+		var macAddress []byte
+		key.DecodeOrDie(remainder, &flowId, &sequenceNumber, &macAddress)
+
+		outputKey := key.Join(session, key.EncodeOrDie(flowId, sequenceNumber))
+
+		if !bytes.Equal(currentOutputKey, outputKey) {
+			if currentOutputKey != nil {
+				outputChan <- &transformer.LevelDbRecord{
+					Key:   currentOutputKey,
+					Value: key.EncodeOrDie(macAddresses),
+				}
+			}
+			currentOutputKey = outputKey
+			macAddresses = [][]byte{}
+		}
+
+		macAddresses = append(macAddresses, macAddress)
+	}
+	if currentOutputKey != nil {
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   currentOutputKey,
+			Value: key.EncodeOrDie(macAddresses),
+		}
+	}
+	close(outputChan)
+}
+
+func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	var currentSession []byte
+	var currentMacAddresses [][]byte
+	var currentFlowId int32
+	for record := range inputChan {
+		session, remainder := DecodeSessionKeyWithRemainder(record.Key)
+		encodedSession := EncodeSessionKey(session)
+		var flowId, sequenceNumber int32
+		key.DecodeOrDie(remainder, &flowId, &sequenceNumber)
+
+		if !bytes.Equal(currentSession, encodedSession) || currentFlowId != flowId {
+			currentSession = encodedSession
+			currentFlowId = -1
+			currentMacAddresses = nil
+		}
+
+		if record.DatabaseIndex == 0 {
+			currentFlowId = flowId
+			key.DecodeOrDie(record.Value, &currentMacAddresses)
+			continue
+		}
+		if currentMacAddresses == nil {
+			continue
+		}
+
+		bytesPerTimestamp := BytesPerTimestamp{}
+		if err := proto.Unmarshal(record.Value, &bytesPerTimestamp); err != nil {
+			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
+		}
+
+		for _, currentMacAddress := range currentMacAddresses {
+			for _, entry := range bytesPerTimestamp.Entry {
+				if entry.Timestamp == nil || entry.Size == nil {
+					panic(fmt.Errorf("Invalid BytesPerTimestampEntry"))
+				}
+				outputChan <- &transformer.LevelDbRecord{
+					Key:   key.EncodeOrDie(session.NodeId, currentMacAddress, *entry.Timestamp, session.AnonymizationContext, session.SessionId, flowId, sequenceNumber),
+					Value: key.EncodeOrDie(*entry.Size),
+				}
+			}
+		}
+	}
+	close(outputChan)
+}
+
+func ReduceBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	emitReducedBucket := func(nodeId, macAddress []byte, timestamp, size int64) {
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie(nodeId, macAddress, timestamp),
+			Value: key.EncodeOrDie(size),
+		}
+	}
+
+	var currentNodeId, currentMacAddress []byte
+	var currentTimestamp int64
+	var currentSize int64
+	for record := range inputChan {
+		var nodeId, macAddress []byte
+		var timestamp int64
+
+		key.DecodeOrDie(record.Key, &nodeId, &macAddress, &timestamp)
+		if !bytes.Equal(currentNodeId, nodeId) || !bytes.Equal(currentMacAddress, macAddress) || currentTimestamp != timestamp {
+			if currentNodeId != nil && currentMacAddress != nil && currentTimestamp >= 0 {
+				emitReducedBucket(currentNodeId, currentMacAddress, currentTimestamp, currentSize)
+			}
+			currentNodeId = nodeId
+			currentMacAddress = macAddress
+			currentTimestamp = timestamp
+			currentSize = 0
+		}
+
+		var size int64
+		key.DecodeOrDie(record.Value, &size)
+		currentSize += size
+		log.Printf("Reducing: %s,%s,%d: %v", nodeId, macAddress, timestamp, size)
+	}
+	if currentNodeId != nil && currentMacAddress != nil && currentTimestamp >= 0 {
+		emitReducedBucket(currentNodeId, currentMacAddress, currentTimestamp, currentSize)
+	}
+	close(outputChan)
+}
