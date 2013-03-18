@@ -19,6 +19,7 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 	switch pipelineName {
 	case "availability":
 		excludeRangesStore := transformer.NewLevelDbStore(dbPath("availability-done"))
+		consistentRangesStore := transformer.NewLevelDbStore(dbPath("consistent-ranges"))
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
 		intervalsStore := transformer.NewLevelDbStore(dbPath("availability-intervals"))
 		consolidatedStore := transformer.NewLevelDbStore(dbPath("availability-consolidated"))
@@ -37,13 +38,14 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			nodesStore,
 			jsonHandle,
 			excludeRangesStore,
+			consistentRangesStore,
 			time.Now().Unix(),
 			workers)
 	case "bytesperminute":
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
 		mappedStore := transformer.NewLevelDbStore(dbPath("bytesperminute-mapped"))
-        traceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges"))
-        consolidatedTraceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges"))
+		traceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges"))
+		consolidatedTraceKeyRangesStore := transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges"))
 		bytesPerMinuteStore := transformer.NewLevelDbStore(dbPath("bytesperminute"))
 		bytesPerHourStore := transformer.NewLevelDbStore(dbPath("bytesperhour"))
 		return passive.BytesPerMinutePipeline(tracesStore, mappedStore, bytesPerMinuteStore, bytesPerHourStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore, workers)
@@ -52,31 +54,31 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
 		flagset.Parse(flag.Args()[2:])
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
-        filteredStore := transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s", *nodeId)))
-        return []transformer.PipelineStage{
-            transformer.PipelineStage{
-                Name: "FilterNode",
-                Reader: passive.IncludeNodes(tracesStore, *nodeId),
-                Writer: filteredStore,
-            },
-        }
-    case "filterdates":
+		filteredStore := transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s", *nodeId)))
+		return []transformer.PipelineStage{
+			transformer.PipelineStage{
+				Name:   "FilterNode",
+				Reader: passive.IncludeNodes(tracesStore, *nodeId),
+				Writer: filteredStore,
+			},
+		}
+	case "filterdates":
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		sessionStartDate := flagset.String("session_start_date", "20120301", "Retain only session starting after this date, in YYYYMMDD format.")
 		sessionEndDate := flagset.String("session_end_date", "20120401", "Retain only session starting before this date, in YYYYMMDD format.")
 		flagset.Parse(flag.Args()[2:])
-        timeFormatString := "20060102"
-        sessionStartTime, err := time.Parse(timeFormatString, *sessionStartDate)
-        if err != nil {
-            panic(fmt.Errorf("Error parsing start date %s: %v", sessionStartDate, err))
-        }
-        sessionEndTime, err := time.Parse(timeFormatString, *sessionEndDate)
-        if err != nil {
-            panic(fmt.Errorf("Error parsing end date %s: %v", sessionEndDate, err))
-        }
+		timeFormatString := "20060102"
+		sessionStartTime, err := time.Parse(timeFormatString, *sessionStartDate)
+		if err != nil {
+			panic(fmt.Errorf("Error parsing start date %s: %v", sessionStartDate, err))
+		}
+		sessionEndTime, err := time.Parse(timeFormatString, *sessionEndDate)
+		if err != nil {
+			panic(fmt.Errorf("Error parsing end date %s: %v", sessionEndDate, err))
+		}
 		availabilityRangesStore := transformer.NewLevelDbStore(dbPath("availability-done"))
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
-        filteredStore := transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s-%s", *sessionStartDate, *sessionEndDate)))
+		filteredStore := transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s-%s", *sessionStartDate, *sessionEndDate)))
 		return passive.FilterSessionsPipeline(sessionStartTime.Unix(), sessionEndTime.Unix(), tracesStore, availabilityRangesStore, filteredStore)
 	case "index":
 		tarnamesStore := transformer.NewLevelDbStore(dbPath("tarnames"))
@@ -90,12 +92,12 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 				Writer:      transformer.NewMuxedStoreWriter(tracesStore, tarnamesIndexedStore),
 			},
 		}
-    case "statistics":
+	case "statistics":
 		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
-        traceAggregatesStore := transformer.NewLevelDbStore(dbPath("statistics-trace-aggregates"))
-        nodeAggregatesStore := transformer.NewLevelDbStore(dbPath("statistics-node-aggregates"))
-        traceKeyRangesStore := transformer.NewLevelDbStore(dbPath("statistics-trace-key-ranges"))
-        consolidatedTraceKeyRangesStore := transformer.NewLevelDbStore(dbPath("statistics-consolidated-trace-key-ranges"))
+		traceAggregatesStore := transformer.NewLevelDbStore(dbPath("statistics-trace-aggregates"))
+		nodeAggregatesStore := transformer.NewLevelDbStore(dbPath("statistics-node-aggregates"))
+		traceKeyRangesStore := transformer.NewLevelDbStore(dbPath("statistics-trace-key-ranges"))
+		consolidatedTraceKeyRangesStore := transformer.NewLevelDbStore(dbPath("statistics-consolidated-trace-key-ranges"))
 		flagset := flag.NewFlagSet("statistics", flag.ExitOnError)
 		jsonOutput := flagset.String("json_output", "/dev/null", "Write statistics in JSON format to this file.")
 		flagset.Parse(flag.Args()[2:])
@@ -103,14 +105,14 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		if err != nil {
 			log.Fatalf("Error opening JSON output: %v", err)
 		}
-        return passive.AggregateStatisticsPipeline(
-            tracesStore,
-            traceAggregatesStore,
-            nodeAggregatesStore,
-            jsonHandle,
-            traceKeyRangesStore,
-            consolidatedTraceKeyRangesStore,
-            workers)
+		return passive.AggregateStatisticsPipeline(
+			tracesStore,
+			traceAggregatesStore,
+			nodeAggregatesStore,
+			jsonHandle,
+			traceKeyRangesStore,
+			consolidatedTraceKeyRangesStore,
+			workers)
 	//case "bytesperdevice":
 	//	return []passive.PipelineStage{
 	//		passive.PipelineStage{
