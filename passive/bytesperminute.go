@@ -3,13 +3,15 @@ package passive
 import (
 	"bytes"
 	"code.google.com/p/goprotobuf/proto"
+	"database/sql"
+	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
 	"log"
 	"time"
 )
 
-func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, bytesPerMinuteStore transformer.Datastore, bytesPerHourStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, bytesPerMinuteStore transformer.Datastore, bytesPerHourStore transformer.Datastore, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
@@ -28,6 +30,11 @@ func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, by
 			Reader:      bytesPerMinuteStore,
 			Transformer: transformer.TransformFunc(BytesPerHourReducer),
 			Writer:      bytesPerHourStore,
+		},
+		transformer.PipelineStage{
+			Name:   "BytesPerHourPostgres",
+			Reader: bytesPerHourStore,
+			Writer: NewBytesPerHourPostgresStore("sburnett", "sburnett"),
 		},
 	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
@@ -130,4 +137,78 @@ func BytesPerHourReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 		}
 	}
 	close(outputChan)
+}
+
+type BytesPerHourPostgresStore struct {
+	user   string
+	dbname string
+
+	conn        *sql.DB
+	transaction *sql.Tx
+	statement   *sql.Stmt
+}
+
+func NewBytesPerHourPostgresStore(user, dbname string) *BytesPerHourPostgresStore {
+	return &BytesPerHourPostgresStore{
+		user:   user,
+		dbname: dbname,
+	}
+}
+
+func (store *BytesPerHourPostgresStore) BeginWriting() error {
+	conn, err := sql.Open("postgres", "")
+	if err != nil {
+		return err
+	}
+	transaction, err := conn.Begin()
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	if _, err := transaction.Exec("SET search_path TO bismark_passive"); err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	if _, err := transaction.Exec("DELETE FROM bytes_per_hour"); err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	statement, err := transaction.Prepare("INSERT INTO bytes_per_hour (node_id, timestamp, bytes) VALUES ($1, $2, $3)")
+	if err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	store.conn = conn
+	store.transaction = transaction
+	store.statement = statement
+	return nil
+}
+
+func (store *BytesPerHourPostgresStore) WriteRecord(record *transformer.LevelDbRecord) error {
+	var nodeId []byte
+	var timestamp, size int64
+
+	key.DecodeOrDie(record.Key, &nodeId, &timestamp)
+	key.DecodeOrDie(record.Value, &size)
+
+	if _, err := store.statement.Exec(nodeId, time.Unix(timestamp, 0), size); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (store *BytesPerHourPostgresStore) EndWriting() error {
+	if err := store.statement.Close(); err != nil {
+		return err
+	}
+	if err := store.transaction.Commit(); err != nil {
+		return err
+	}
+	if err := store.conn.Close(); err != nil {
+		return err
+	}
+	return nil
 }
