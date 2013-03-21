@@ -18,7 +18,7 @@ func makeRecordToInclude(nodeId string, sequenceNumber int32) *transformer.Level
 	}
 }
 
-func runIncludeNodes(records *IncludeNodesStore) {
+func runIncludeNodes(records transformer.StoreReader) {
 	records.BeginReading()
 	for {
 		record, err := records.ReadRecord()
@@ -80,5 +80,6 @@ func ExampleIncludeNodes_multipleNodes() {
 	// node2 5
 	// node4 8
 	// node4 9
+	// node5 10
 	// node7 12
 }
