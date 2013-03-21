@@ -46,8 +46,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-id-to-macs")),
 			transformer.NewLevelDbStore(dbPath("bytesperdevice-unreduced")),
 			transformer.NewLevelDbStore(dbPath("bytesperdevice")),
-			transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges")),
-			transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-trace-key-ranges")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-consolidated-trace-key-ranges")),
 			workers)
 	case "bytesperminute":
 		return passive.BytesPerMinutePipeline(
