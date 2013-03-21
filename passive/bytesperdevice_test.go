@@ -15,6 +15,7 @@ func runBytesPerDevicePipeline(consistentRanges []*transformer.LevelDbRecord, al
 		availabilityIntervalsStore.WriteRecord(record)
 	}
 	availabilityIntervalsStore.EndWriting()
+	sessionsStore := transformer.SliceStore{}
 	addressTableStore := transformer.SliceStore{}
 	flowTableStore := transformer.SliceStore{}
 	packetsStore := transformer.SliceStore{}
@@ -22,6 +23,7 @@ func runBytesPerDevicePipeline(consistentRanges []*transformer.LevelDbRecord, al
 	flowIdToMacsStore := transformer.SliceStore{}
 	bytesPerDeviceUnreducedStore := transformer.SliceStore{}
 	bytesPerDeviceStore := transformer.SliceStore{}
+	bytesPerDevicePostgresStore := transformer.SliceStore{}
 	traceKeyRangesStore := transformer.SliceStore{}
 	consolidatedTraceKeyRangesStore := transformer.SliceStore{}
 
@@ -36,7 +38,7 @@ func runBytesPerDevicePipeline(consistentRanges []*transformer.LevelDbRecord, al
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &addressTableStore, &flowTableStore, &packetsStore, &flowIdToMacStore, &flowIdToMacsStore, &bytesPerDeviceUnreducedStore, &bytesPerDeviceStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+		transformer.RunPipeline(BytesPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &sessionsStore, &addressTableStore, &flowTableStore, &packetsStore, &flowIdToMacStore, &flowIdToMacsStore, &bytesPerDeviceUnreducedStore, &bytesPerDeviceStore, &bytesPerDevicePostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
 	}
 
 	bytesPerDeviceStore.BeginReading()
@@ -225,11 +227,11 @@ func ExampleBytesPerDevice_missingFlow() {
 	// No output
 }
 
-func ExampleBytesPerDevice_roundToMinute() {
+func ExampleBytesPerDevice_roundToHour() {
 	trace := Trace{
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
-				TimestampMicroseconds: proto.Int64(1e6 * 61), // 61 seconds past midnight on January 1, 1970
+				TimestampMicroseconds: proto.Int64(1e6 * 3601), // 60 minutes, 1 second past midnight on January 1, 1970
 				Size:                  proto.Int32(20),
 				FlowId:                proto.Int32(4),
 			},
@@ -260,19 +262,19 @@ func ExampleBytesPerDevice_roundToMinute() {
 	runBytesPerDevicePipeline(consistentRanges, records)
 
 	// Output:
-	// node0,AABBCCDDEEFF,60: 20
+	// node0,AABBCCDDEEFF,3600: 20
 }
 
-func ExampleBytesPerDevice_multipleMinutes() {
+func ExampleBytesPerDevice_multipleHours() {
 	trace := Trace{
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
-				TimestampMicroseconds: proto.Int64(1e6 * 60), // 1 minute past midnight on January 1, 1970
+				TimestampMicroseconds: proto.Int64(1e6 * 3600), // 1 hour past midnight on January 1, 1970
 				Size:                  proto.Int32(20),
 				FlowId:                proto.Int32(4),
 			},
 			&PacketSeriesEntry{
-				TimestampMicroseconds: proto.Int64(1e6 * 120), // 2 minutes past midnight on January 1, 1970
+				TimestampMicroseconds: proto.Int64(1e6 * 7200), // 2 hours past midnight on January 1, 1970
 				Size:                  proto.Int32(10),
 				FlowId:                proto.Int32(4),
 			},
@@ -303,8 +305,8 @@ func ExampleBytesPerDevice_multipleMinutes() {
 	runBytesPerDevicePipeline(consistentRanges, records)
 
 	// Output:
-	// node0,AABBCCDDEEFF,60: 20
-	// node0,AABBCCDDEEFF,120: 10
+	// node0,AABBCCDDEEFF,3600: 20
+	// node0,AABBCCDDEEFF,7200: 10
 }
 
 func ExampleBytesPerDevice_multipleFlows() {

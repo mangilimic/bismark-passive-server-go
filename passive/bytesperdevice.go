@@ -3,7 +3,9 @@ package passive
 import (
 	"bytes"
 	"code.google.com/p/goprotobuf/proto"
+	"database/sql"
 	"fmt"
+	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
 	"time"
@@ -14,30 +16,31 @@ type FlowTimestamp struct {
 	timestamp int64
 }
 
-func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore, bytesPerDeviceUnreducedStore transformer.Datastore, bytesPerDeviceStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
-	availableTracesStore := transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore)
+func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, sessionsStore, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore transformer.DatastoreFull, bytesPerDeviceUnreducedStore transformer.Datastore, bytesPerDeviceStore transformer.Datastore, bytesPerDevicePostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+	newTracesStore := transformer.ReadExcludingRanges(transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerDeviceMapper",
-			Reader:      transformer.ReadExcludingRanges(availableTracesStore, traceKeyRangesStore),
+			Reader:      newTracesStore,
 			Transformer: transformer.MakeMultipleOutputsDoFunc(BytesPerDeviceMapper, 3, workers),
 			Writer:      transformer.NewMuxedStoreWriter(addressTableStore, flowTableStore, packetsStore),
 		},
+		SessionPipelineStage(newTracesStore, sessionsStore),
 		transformer.PipelineStage{
 			Name:        "JoinMacAndFlowId",
-			Reader:      transformer.NewDemuxStoreReader(addressTableStore, flowTableStore),
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(addressTableStore, flowTableStore), sessionsStore),
 			Transformer: transformer.TransformFunc(JoinMacAndFlowId),
 			Writer:      flowIdToMacStore,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenMacAddresses",
-			Reader:      flowIdToMacStore,
+			Reader:      transformer.ReadIncludingPrefixes(flowIdToMacStore, sessionsStore),
 			Transformer: transformer.TransformFunc(FlattenMacAddresses),
 			Writer:      flowIdToMacsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinMacAndSizes",
-			Reader:      transformer.NewDemuxStoreReader(flowIdToMacsStore, packetsStore),
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(flowIdToMacsStore, packetsStore), sessionsStore),
 			Transformer: transformer.TransformFunc(JoinMacAndSizes),
 			Writer:      bytesPerDeviceUnreducedStore,
 		},
@@ -47,7 +50,12 @@ func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.
 			Transformer: transformer.TransformFunc(ReduceBytesPerDevice),
 			Writer:      bytesPerDeviceStore,
 		},
-	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(availableTracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
+		transformer.PipelineStage{
+			Name:   "BytesPerDevicePostgres",
+			Reader: bytesPerDeviceStore,
+			Writer: bytesPerDevicePostgresStore,
+		},
+	}, TraceKeyRangesPipeline(newTracesStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
 func MapTraceToAddressTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
@@ -90,29 +98,24 @@ func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan ch
 			continue
 		}
 		timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds*1000)
-		minuteTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), 0, 0, time.UTC)
+		hourTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), 0, 0, 0, time.UTC)
 		if _, ok := buckets[*packetSeriesEntry.FlowId]; !ok {
 			buckets[*packetSeriesEntry.FlowId] = make(map[int64]int64)
 		}
-		buckets[*packetSeriesEntry.FlowId][minuteTimestamp.Unix()] += int64(*packetSeriesEntry.Size)
+		buckets[*packetSeriesEntry.FlowId][hourTimestamp.Unix()] += int64(*packetSeriesEntry.Size)
 	}
 	for flowId, timestampBuckets := range buckets {
-		bytesPerTimestamp := BytesPerTimestamp{}
+		timestamps := make([]int64, len(timestampBuckets))
+		sizes := make([]int64, len(timestampBuckets))
+		idx := 0
 		for timestamp, size := range timestampBuckets {
-			entry := BytesPerTimestampEntry{
-				Timestamp: proto.Int64(timestamp),
-				Size:      proto.Int64(size),
-			}
-			bytesPerTimestamp.Entry = append(bytesPerTimestamp.Entry, &entry)
+			timestamps[idx] = timestamp
+			sizes[idx] = size
+			idx++
 		}
-		encodedBytesPerTimestamp, err := proto.Marshal(&bytesPerTimestamp)
-		if err != nil {
-			panic(err)
-		}
-
 		outputChan <- &transformer.LevelDbRecord{
 			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber),
-			Value: encodedBytesPerTimestamp,
+			Value: key.EncodeOrDie(timestamps, sizes),
 		}
 	}
 }
@@ -222,19 +225,17 @@ func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
 			continue
 		}
 
-		bytesPerTimestamp := BytesPerTimestamp{}
-		if err := proto.Unmarshal(record.Value, &bytesPerTimestamp); err != nil {
-			panic(fmt.Errorf("Error ummarshaling protocol buffer: %v", err))
+		var timestamps, sizes []int64
+		key.DecodeOrDie(record.Value, &timestamps, &sizes)
+		if len(timestamps) != len(sizes) {
+			panic(fmt.Errorf("timestamps and sizes must be the same size"))
 		}
 
 		for _, currentMacAddress := range currentMacAddresses {
-			for _, entry := range bytesPerTimestamp.Entry {
-				if entry.Timestamp == nil || entry.Size == nil {
-					panic(fmt.Errorf("Invalid BytesPerTimestampEntry"))
-				}
+			for idx, timestamp := range timestamps {
 				outputChan <- &transformer.LevelDbRecord{
-					Key:   key.EncodeOrDie(session.NodeId, currentMacAddress, *entry.Timestamp, session.AnonymizationContext, session.SessionId, flowId, sequenceNumber),
-					Value: key.EncodeOrDie(*entry.Size),
+					Key:   key.EncodeOrDie(session.NodeId, currentMacAddress, timestamp, session.AnonymizationContext, session.SessionId, flowId, sequenceNumber),
+					Value: key.EncodeOrDie(sizes[idx]),
 				}
 			}
 		}
@@ -276,4 +277,72 @@ func ReduceBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord)
 		emitReducedBucket(currentNodeId, currentMacAddress, currentTimestamp, currentSize)
 	}
 	close(outputChan)
+}
+
+type BytesPerDevicePostgresStore struct {
+	conn        *sql.DB
+	transaction *sql.Tx
+	statement   *sql.Stmt
+}
+
+func NewBytesPerDevicePostgresStore() *BytesPerDevicePostgresStore {
+	return &BytesPerDevicePostgresStore{}
+}
+
+func (store *BytesPerDevicePostgresStore) BeginWriting() error {
+	conn, err := sql.Open("postgres", "")
+	if err != nil {
+		return err
+	}
+	transaction, err := conn.Begin()
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	if _, err := transaction.Exec("SET search_path TO bismark_passive"); err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	if _, err := transaction.Exec("DELETE FROM bytes_per_device_per_hour"); err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	statement, err := transaction.Prepare("INSERT INTO bytes_per_device_per_hour (node_id, mac_address, timestamp, bytes) VALUES ($1, $2, $3, $4)")
+	if err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	store.conn = conn
+	store.transaction = transaction
+	store.statement = statement
+	return nil
+}
+
+func (store *BytesPerDevicePostgresStore) WriteRecord(record *transformer.LevelDbRecord) error {
+	var nodeId, macAddress []byte
+	var timestamp, size int64
+
+	key.DecodeOrDie(record.Key, &nodeId, &macAddress, &timestamp)
+	key.DecodeOrDie(record.Value, &size)
+
+	if _, err := store.statement.Exec(nodeId, macAddress, time.Unix(timestamp, 0), size); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (store *BytesPerDevicePostgresStore) EndWriting() error {
+	if err := store.statement.Close(); err != nil {
+		return err
+	}
+	if err := store.transaction.Commit(); err != nil {
+		return err
+	}
+	if err := store.conn.Close(); err != nil {
+		return err
+	}
+	return nil
 }
