@@ -34,7 +34,7 @@ func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, by
 		transformer.PipelineStage{
 			Name:   "BytesPerHourPostgres",
 			Reader: bytesPerHourStore,
-			Writer: NewBytesPerHourPostgresStore("sburnett", "sburnett"),
+			Writer: NewBytesPerHourPostgresStore(),
 		},
 	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
@@ -140,19 +140,13 @@ func BytesPerHourReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 }
 
 type BytesPerHourPostgresStore struct {
-	user   string
-	dbname string
-
 	conn        *sql.DB
 	transaction *sql.Tx
 	statement   *sql.Stmt
 }
 
-func NewBytesPerHourPostgresStore(user, dbname string) *BytesPerHourPostgresStore {
-	return &BytesPerHourPostgresStore{
-		user:   user,
-		dbname: dbname,
-	}
+func NewBytesPerHourPostgresStore() *BytesPerHourPostgresStore {
+	return &BytesPerHourPostgresStore{}
 }
 
 func (store *BytesPerHourPostgresStore) BeginWriting() error {
