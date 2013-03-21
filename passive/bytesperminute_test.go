@@ -18,6 +18,7 @@ func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
 func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
 	bytesPerMinuteStore := transformer.SliceStore{}
 	bytesPerHourStore := transformer.SliceStore{}
+	bytesPerHourPostgresStore := transformer.SliceStore{}
 	tracesStore := transformer.SliceStore{}
 	mappedStore := transformer.SliceStore{}
 	traceKeyRangesStore := transformer.SliceStore{}
@@ -33,7 +34,7 @@ func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
 			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 		}
 		tracesStore.EndWriting()
-		transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, &bytesPerHourStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+		transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, &bytesPerHourStore, &bytesPerHourPostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
 	}
 
 	bytesPerMinuteStore.BeginReading()

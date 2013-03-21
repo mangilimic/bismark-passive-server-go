@@ -55,6 +55,7 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			transformer.NewLevelDbStore(dbPath("bytesperminute-mapped")),
 			transformer.NewLevelDbStore(dbPath("bytesperminute")),
 			transformer.NewLevelDbStore(dbPath("bytesperhour")),
+			passive.NewBytesPerHourPostgresStore(),
 			transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges")),
 			transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges")),
 			workers)

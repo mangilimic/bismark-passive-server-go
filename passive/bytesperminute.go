@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, bytesPerMinuteStore transformer.Datastore, bytesPerHourStore transformer.Datastore, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, bytesPerMinuteStore transformer.Datastore, bytesPerHourStore transformer.Datastore, bytesPerHourPostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
@@ -34,7 +34,7 @@ func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, by
 		transformer.PipelineStage{
 			Name:   "BytesPerHourPostgres",
 			Reader: bytesPerHourStore,
-			Writer: NewBytesPerHourPostgresStore(),
+			Writer: bytesPerHourPostgresStore,
 		},
 	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
