@@ -38,6 +38,19 @@ type SessionKey struct {
 	SessionId            int64
 }
 
+func (sessionKey *SessionKey) Equal(otherSession *SessionKey) bool {
+	if !bytes.Equal(sessionKey.NodeId, otherSession.NodeId) {
+		return false
+	}
+	if !bytes.Equal(sessionKey.AnonymizationContext, otherSession.AnonymizationContext) {
+		return false
+	}
+	if sessionKey.SessionId != otherSession.SessionId {
+		return false
+	}
+	return true
+}
+
 func DecodeSessionKeyWithRemainder(encodedKey []byte) (*SessionKey, []byte) {
 	decodedKey := new(SessionKey)
 	remainder := key.DecodeOrDie(
@@ -146,4 +159,35 @@ func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRe
 		}
 	}
 	close(outputChan)
+}
+
+func Sessions(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	var currentSession *SessionKey
+	for record := range inputChan {
+		session := DecodeSessionKey(record.Key)
+		if currentSession == nil {
+			currentSession = session
+		}
+		if !currentSession.Equal(session) {
+			outputChan <- &transformer.LevelDbRecord{
+				Key: EncodeSessionKey(currentSession),
+			}
+			currentSession = session
+		}
+	}
+	if currentSession != nil {
+		outputChan <- &transformer.LevelDbRecord{
+			Key: EncodeSessionKey(currentSession),
+		}
+	}
+	close(outputChan)
+}
+
+func SessionPipelineStage(inputStore transformer.StoreReader, sessionsStore transformer.StoreDeleter) transformer.PipelineStage {
+	return transformer.PipelineStage{
+		Name:        "Sessions",
+		Transformer: transformer.TransformFunc(Sessions),
+		Reader:      inputStore,
+		Writer:      transformer.TruncateBeforeWriting(sessionsStore),
+	}
 }
