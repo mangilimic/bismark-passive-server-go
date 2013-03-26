@@ -39,6 +39,7 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		return passive.BytesPerDevicePipeline(
 			transformer.NewLevelDbStore(dbPath("traces")),
 			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
+			transformer.NewLevelDbStore(dbPath("bytesperdevice-sessions")),
 			transformer.NewLevelDbStore(dbPath("bytesperdevice-address-table")),
 			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-table")),
 			transformer.NewLevelDbStore(dbPath("bytesperdevice-packets")),
