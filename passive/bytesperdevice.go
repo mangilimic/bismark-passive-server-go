@@ -16,7 +16,7 @@ type FlowTimestamp struct {
 	timestamp int64
 }
 
-func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, sessionsStore, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore transformer.DatastoreFull, bytesPerDeviceUnreducedStore transformer.Datastore, bytesPerDeviceStore transformer.Datastore, bytesPerDevicePostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, sessionsStore, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore transformer.DatastoreFull, bytesPerDeviceUnreducedStore transformer.Datastore, bytesPerDeviceSessionStore, bytesPerDeviceStore transformer.Datastore, bytesPerDevicePostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
 	newTracesStore := transformer.ReadExcludingRanges(transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
@@ -45,8 +45,14 @@ func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.
 			Writer:      bytesPerDeviceUnreducedStore,
 		},
 		transformer.PipelineStage{
-			Name:        "ReduceBytesPerDevice",
+			Name:        "ReduceBytesPerDeviceSession",
 			Reader:      bytesPerDeviceUnreducedStore,
+			Transformer: transformer.TransformFunc(ReduceBytesPerDeviceSession),
+			Writer:      bytesPerDeviceSessionStore,
+		},
+		transformer.PipelineStage{
+			Name:        "ReduceBytesPerDevice",
+			Reader:      bytesPerDeviceSessionStore,
 			Transformer: transformer.TransformFunc(ReduceBytesPerDevice),
 			Writer:      bytesPerDeviceStore,
 		},
@@ -234,11 +240,51 @@ func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
 		for _, currentMacAddress := range currentMacAddresses {
 			for idx, timestamp := range timestamps {
 				outputChan <- &transformer.LevelDbRecord{
-					Key:   key.EncodeOrDie(session.NodeId, currentMacAddress, timestamp, session.AnonymizationContext, session.SessionId, flowId, sequenceNumber),
+					Key:   key.EncodeOrDie(session.NodeId, session.AnonymizationContext, session.SessionId, currentMacAddress, timestamp, flowId, sequenceNumber),
 					Value: key.EncodeOrDie(sizes[idx]),
 				}
 			}
 		}
+	}
+	close(outputChan)
+}
+
+func ReduceBytesPerDeviceSession(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	emitReducedBucket := func(session *SessionKey, macAddress []byte, timestamp, size int64) {
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie(session.NodeId, macAddress, timestamp, session.AnonymizationContext, session.SessionId),
+			Value: key.EncodeOrDie(size),
+		}
+	}
+
+	var currentSession *SessionKey
+	var currentMacAddress []byte
+	var currentTimestamp int64
+	var currentSize int64
+	for record := range inputChan {
+		session, remainingKey := DecodeSessionKeyWithRemainder(record.Key)
+		var macAddress []byte
+		var timestamp int64
+		key.DecodeOrDie(remainingKey, &macAddress, &timestamp)
+		if currentSession == nil {
+			currentSession = session
+		}
+		if !currentSession.Equal(session) || !bytes.Equal(currentMacAddress, macAddress) || currentTimestamp != timestamp {
+			if currentSession != nil && currentMacAddress != nil && currentTimestamp >= 0 {
+				emitReducedBucket(currentSession, currentMacAddress, currentTimestamp, currentSize)
+			}
+			currentSession = session
+			currentMacAddress = macAddress
+			currentTimestamp = timestamp
+			currentSize = 0
+		}
+
+		var size int64
+		key.DecodeOrDie(record.Value, &size)
+		currentSize += size
+	}
+	if currentSession != nil && currentMacAddress != nil && currentTimestamp >= 0 {
+		emitReducedBucket(currentSession, currentMacAddress, currentTimestamp, currentSize)
 	}
 	close(outputChan)
 }
