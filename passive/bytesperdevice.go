@@ -16,7 +16,7 @@ type FlowTimestamp struct {
 	timestamp int64
 }
 
-func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, sessionsStore, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore transformer.DatastoreFull, bytesPerDeviceUnreducedStore transformer.Datastore, bytesPerDeviceSessionStore, bytesPerDeviceStore transformer.Datastore, bytesPerDevicePostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, sessionsStore, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore, bytesPerDeviceUnreducedStore transformer.DatastoreFull, bytesPerDeviceSessionStore, bytesPerDeviceStore transformer.Datastore, bytesPerDevicePostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
 	newTracesStore := transformer.ReadExcludingRanges(transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
@@ -46,7 +46,7 @@ func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.
 		},
 		transformer.PipelineStage{
 			Name:        "ReduceBytesPerDeviceSession",
-			Reader:      bytesPerDeviceUnreducedStore,
+			Reader:      transformer.ReadIncludingPrefixes(bytesPerDeviceUnreducedStore, sessionsStore),
 			Transformer: transformer.TransformFunc(ReduceBytesPerDeviceSession),
 			Writer:      bytesPerDeviceSessionStore,
 		},
