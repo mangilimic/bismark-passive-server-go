@@ -1,8 +1,8 @@
 package passive
 
 import (
-	"bytes"
 	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
 )
 
 type FilterSessions struct {
@@ -28,17 +28,19 @@ func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, tracesStore,
 func (parameters FilterSessions) Do(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	traceDuration := int64(30000000) // This is a big assumption about how clients generate traces.
 	var useCurrentSession bool
-	var currentSession []byte
+	var currentSession *SessionKey
 	for record := range inputChan {
-		session := EncodeSessionKey(DecodeSessionKey(record.Key))
+		var session SessionKey
+		key.DecodeOrDie(record.Key, &session)
 		if record.DatabaseIndex == 0 {
-			startKey := DecodeTraceKey(record.Key)
-			endKey := DecodeTraceKey(record.Value)
+			var startKey, endKey TraceKey
+			key.DecodeOrDie(record.Key, &startKey)
+			key.DecodeOrDie(record.Value, &endKey)
 			useCurrentSession = startKey.SessionId <= parameters.SessionEndTime && endKey.SessionId+traceDuration*int64(endKey.SequenceNumber) >= parameters.SessionStartTime && startKey.SequenceNumber == 0
-			currentSession = session
+			currentSession = &session
 			continue
 		}
-		if useCurrentSession && bytes.Equal(session, currentSession) {
+		if useCurrentSession && session.Equal(currentSession) {
 			outputChan <- record
 		}
 	}

@@ -3,6 +3,7 @@ package passive
 import (
 	"fmt"
 	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
 )
 
 func makeSessionRecord(nodeId string, sessionId int64, sequenceNumber int32) *transformer.LevelDbRecord {
@@ -13,7 +14,7 @@ func makeSessionRecord(nodeId string, sessionId int64, sequenceNumber int32) *tr
 		SequenceNumber:       sequenceNumber,
 	}
 	return &transformer.LevelDbRecord{
-		Key:   EncodeTraceKey(&traceKey),
+		Key:   key.EncodeOrDie(&traceKey),
 		Value: []byte{},
 	}
 }
@@ -32,8 +33,8 @@ func makeRangeRecord(nodeId string, sessionId int64, firstSequenceNumber, lastSe
 		SequenceNumber:       lastSequenceNumber,
 	}
 	return &transformer.LevelDbRecord{
-		Key:   EncodeTraceKey(&traceKey),
-		Value: EncodeTraceKey(&traceValue),
+		Key:   key.EncodeOrDie(&traceKey),
+		Value: key.EncodeOrDie(&traceValue),
 	}
 }
 
@@ -49,7 +50,8 @@ func runFilterSessionsPipeline(startSecs, endSecs int64, tracesStore, traceKeyRa
 		if record == nil {
 			break
 		}
-		traceKey := DecodeTraceKey(record.Key)
+		var traceKey TraceKey
+		key.DecodeOrDie(record.Key, &traceKey)
 		fmt.Printf("%s %d %d\n", traceKey.NodeId, traceKey.SessionId, traceKey.SequenceNumber)
 	}
 	filteredStore.EndReading()

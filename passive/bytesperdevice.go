@@ -127,34 +127,33 @@ func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan ch
 }
 
 func BytesPerDeviceMapper(record *transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
-	traceKey := DecodeTraceKey(record.Key)
+	var traceKey TraceKey
+	key.DecodeOrDie(record.Key, &traceKey)
 	var trace Trace
 	if err := proto.Unmarshal(record.Value, &trace); err != nil {
 		panic(err)
 	}
 
-	MapTraceToAddressTable(traceKey, &trace, outputChans[0])
-	MapTraceToFlowTable(traceKey, &trace, outputChans[1])
-	MapTraceToBytesPerTimestamp(traceKey, &trace, outputChans[2])
+	MapTraceToAddressTable(&traceKey, &trace, outputChans[0])
+	MapTraceToFlowTable(&traceKey, &trace, outputChans[1])
+	MapTraceToBytesPerTimestamp(&traceKey, &trace, outputChans[2])
 }
 
 func JoinMacAndFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentSession, currentMacAddress, currentIpAddress []byte
+	var currentPrimaryKey, currentMacAddress []byte
 	for record := range inputChan {
-		decodedSession, remainder := DecodeSessionKeyWithRemainder(record.Key)
-		session := EncodeSessionKey(decodedSession)
+		var session SessionKey
 		var ipAddress []byte
 		var sequenceNumber int32
-		key.DecodeOrDie(remainder, &ipAddress, &sequenceNumber)
+		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &ipAddress)
+		key.DecodeOrDie(remainder, &sequenceNumber)
 
-		if !bytes.Equal(currentSession, session) || !bytes.Equal(currentIpAddress, ipAddress) {
-			currentSession = session
-			currentIpAddress = nil
+		if !bytes.Equal(currentPrimaryKey, primaryKey) {
+			currentPrimaryKey = primaryKey
 			currentMacAddress = nil
 		}
 
 		if record.DatabaseIndex == 0 {
-			currentIpAddress = ipAddress
 			currentMacAddress = record.Value
 			continue
 		}
@@ -165,7 +164,7 @@ func JoinMacAndFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
 		key.DecodeOrDie(record.Value, &flowIds)
 		for _, flowId := range flowIds {
 			outputChan <- &transformer.LevelDbRecord{
-				Key: key.Join(session, key.EncodeOrDie(flowId, sequenceNumber), currentMacAddress),
+				Key: key.Join(key.EncodeOrDie(&session, flowId, sequenceNumber), currentMacAddress),
 			}
 		}
 	}
@@ -176,13 +175,11 @@ func FlattenMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) 
 	var currentOutputKey []byte
 	var macAddresses [][]byte
 	for record := range inputChan {
-		decodedSession, remainder := DecodeSessionKeyWithRemainder(record.Key)
-		session := EncodeSessionKey(decodedSession)
+		var session SessionKey
 		var flowId, sequenceNumber int32
+		outputKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &flowId, &sequenceNumber)
 		var macAddress []byte
-		key.DecodeOrDie(remainder, &flowId, &sequenceNumber, &macAddress)
-
-		outputKey := key.Join(session, key.EncodeOrDie(flowId, sequenceNumber))
+		key.DecodeOrDie(remainder, &macAddress)
 
 		if !bytes.Equal(currentOutputKey, outputKey) {
 			if currentOutputKey != nil {
@@ -207,23 +204,21 @@ func FlattenMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) 
 }
 
 func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentSession []byte
+	var currentPrimaryKey []byte
 	var currentMacAddresses [][]byte
-	var currentFlowId int32
 	for record := range inputChan {
-		session, remainder := DecodeSessionKeyWithRemainder(record.Key)
-		encodedSession := EncodeSessionKey(session)
-		var flowId, sequenceNumber int32
-		key.DecodeOrDie(remainder, &flowId, &sequenceNumber)
+		var session SessionKey
+		var flowId int32
+		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &flowId)
+		var sequenceNumber int32
+		key.DecodeOrDie(remainder, &sequenceNumber)
 
-		if !bytes.Equal(currentSession, encodedSession) || currentFlowId != flowId {
-			currentSession = encodedSession
-			currentFlowId = -1
+		if !bytes.Equal(currentPrimaryKey, primaryKey) {
+			currentPrimaryKey = primaryKey
 			currentMacAddresses = nil
 		}
 
 		if record.DatabaseIndex == 0 {
-			currentFlowId = flowId
 			key.DecodeOrDie(record.Value, &currentMacAddresses)
 			continue
 		}
@@ -257,23 +252,23 @@ func ReduceBytesPerDeviceSession(inputChan, outputChan chan *transformer.LevelDb
 		}
 	}
 
+	var currentPrimaryKey []byte
 	var currentSession *SessionKey
 	var currentMacAddress []byte
 	var currentTimestamp int64
 	var currentSize int64
 	for record := range inputChan {
-		session, remainingKey := DecodeSessionKeyWithRemainder(record.Key)
+		var session SessionKey
 		var macAddress []byte
 		var timestamp int64
-		key.DecodeOrDie(remainingKey, &macAddress, &timestamp)
-		if currentSession == nil {
-			currentSession = session
-		}
-		if !currentSession.Equal(session) || !bytes.Equal(currentMacAddress, macAddress) || currentTimestamp != timestamp {
+		primaryKey, _ := key.DecodeAndSplitOrDie(record.Key, &session, &macAddress, &timestamp)
+
+		if !bytes.Equal(currentPrimaryKey, primaryKey) {
 			if currentSession != nil && currentMacAddress != nil && currentTimestamp >= 0 {
 				emitReducedBucket(currentSession, currentMacAddress, currentTimestamp, currentSize)
 			}
-			currentSession = session
+			currentPrimaryKey = primaryKey
+			currentSession = &session
 			currentMacAddress = macAddress
 			currentTimestamp = timestamp
 			currentSize = 0
@@ -297,18 +292,18 @@ func ReduceBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord)
 		}
 	}
 
-	var currentNodeId, currentMacAddress []byte
+	var currentPrimaryKey, currentNodeId, currentMacAddress []byte
 	var currentTimestamp int64
 	var currentSize int64
 	for record := range inputChan {
 		var nodeId, macAddress []byte
 		var timestamp int64
-
-		key.DecodeOrDie(record.Key, &nodeId, &macAddress, &timestamp)
-		if !bytes.Equal(currentNodeId, nodeId) || !bytes.Equal(currentMacAddress, macAddress) || currentTimestamp != timestamp {
+		primaryKey, _ := key.DecodeAndSplitOrDie(record.Key, &nodeId, &macAddress, &timestamp)
+		if !bytes.Equal(currentPrimaryKey, primaryKey) {
 			if currentNodeId != nil && currentMacAddress != nil && currentTimestamp >= 0 {
 				emitReducedBucket(currentNodeId, currentMacAddress, currentTimestamp, currentSize)
 			}
+			currentPrimaryKey = primaryKey
 			currentNodeId = nodeId
 			currentMacAddress = macAddress
 			currentTimestamp = timestamp

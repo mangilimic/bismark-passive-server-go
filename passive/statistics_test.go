@@ -5,6 +5,7 @@ import (
 	"code.google.com/p/goprotobuf/proto"
 	"fmt"
 	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
 )
 
 func makeTraceWithStatistics(nodeId string, packetSizes []int, packetsDropped, pcapDropped, interfaceDropped, numFlows, flowsDropped int) *Trace {
@@ -45,7 +46,7 @@ func runAggregateStatisticsPipeline(allTraces ...[]*Trace) {
 				SessionId:            0,
 				SequenceNumber:       sequenceNumber,
 			}
-			encodedKey := EncodeTraceKey(&traceKey)
+			encodedKey := key.EncodeOrDie(&traceKey)
 			encodedTrace, err := proto.Marshal(trace)
 			if err != nil {
 				panic(fmt.Errorf("Error encoding protocol buffer: %v", err))

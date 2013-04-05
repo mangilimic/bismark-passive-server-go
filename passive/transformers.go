@@ -13,23 +13,48 @@ type TraceKey struct {
 	SequenceNumber       int32
 }
 
-func DecodeTraceKey(encodedKey []byte) *TraceKey {
-	decodedKey := new(TraceKey)
-	key.DecodeOrDie(
-		encodedKey,
-		&decodedKey.NodeId,
-		&decodedKey.AnonymizationContext,
-		&decodedKey.SessionId,
-		&decodedKey.SequenceNumber)
-	return decodedKey
+func (traceKey *TraceKey) EncodeLexicographically() ([]byte, error) {
+	return key.Encode(
+		traceKey.NodeId,
+		traceKey.AnonymizationContext,
+		traceKey.SessionId,
+		traceKey.SequenceNumber)
 }
 
-func EncodeTraceKey(decodedKey *TraceKey) []byte {
-	return key.EncodeOrDie(
-		decodedKey.NodeId,
-		decodedKey.AnonymizationContext,
-		decodedKey.SessionId,
-		decodedKey.SequenceNumber)
+func (traceKey *TraceKey) DecodeLexicographically(reader *bytes.Buffer) error {
+	return key.Read(
+		reader,
+		&traceKey.NodeId,
+		&traceKey.AnonymizationContext,
+		&traceKey.SessionId,
+		&traceKey.SequenceNumber)
+}
+
+func (traceKey *TraceKey) SessionKey() *SessionKey {
+	return &SessionKey{
+		NodeId:               traceKey.NodeId,
+		AnonymizationContext: traceKey.AnonymizationContext,
+		SessionId:            traceKey.SessionId,
+	}
+}
+
+func (traceKey *TraceKey) Equal(otherTraceKey *TraceKey) bool {
+	if otherTraceKey == nil {
+		return false
+	}
+	if !bytes.Equal(traceKey.NodeId, otherTraceKey.NodeId) {
+		return false
+	}
+	if !bytes.Equal(traceKey.AnonymizationContext, otherTraceKey.AnonymizationContext) {
+		return false
+	}
+	if traceKey.SessionId != otherTraceKey.SessionId {
+		return false
+	}
+	if traceKey.SequenceNumber != otherTraceKey.SequenceNumber {
+		return false
+	}
+	return true
 }
 
 type SessionKey struct {
@@ -38,7 +63,34 @@ type SessionKey struct {
 	SessionId            int64
 }
 
+func (sessionKey *SessionKey) EncodeLexicographically() ([]byte, error) {
+	return key.Encode(
+		sessionKey.NodeId,
+		sessionKey.AnonymizationContext,
+		sessionKey.SessionId)
+}
+
+func (sessionKey *SessionKey) DecodeLexicographically(reader *bytes.Buffer) error {
+	return key.Read(
+		reader,
+		&sessionKey.NodeId,
+		&sessionKey.AnonymizationContext,
+		&sessionKey.SessionId)
+}
+
+func (sessionKey *SessionKey) TraceKey(sequenceNumber int32) *TraceKey {
+	return &TraceKey{
+		NodeId:               sessionKey.NodeId,
+		AnonymizationContext: sessionKey.AnonymizationContext,
+		SessionId:            sessionKey.SessionId,
+		SequenceNumber:       sequenceNumber,
+	}
+}
+
 func (sessionKey *SessionKey) Equal(otherSession *SessionKey) bool {
+	if otherSession == nil {
+		return false
+	}
 	if !bytes.Equal(sessionKey.NodeId, otherSession.NodeId) {
 		return false
 	}
@@ -49,28 +101,6 @@ func (sessionKey *SessionKey) Equal(otherSession *SessionKey) bool {
 		return false
 	}
 	return true
-}
-
-func DecodeSessionKeyWithRemainder(encodedKey []byte) (*SessionKey, []byte) {
-	decodedKey := new(SessionKey)
-	remainder := key.DecodeOrDie(
-		encodedKey,
-		&decodedKey.NodeId,
-		&decodedKey.AnonymizationContext,
-		&decodedKey.SessionId)
-	return decodedKey, remainder
-}
-
-func DecodeSessionKey(encodedKey []byte) *SessionKey {
-	decodedKey, _ := DecodeSessionKeyWithRemainder(encodedKey)
-	return decodedKey
-}
-
-func EncodeSessionKey(decodedKey *SessionKey) []byte {
-	return key.EncodeOrDie(
-		decodedKey.NodeId,
-		decodedKey.AnonymizationContext,
-		decodedKey.SessionId)
 }
 
 func TraceKeyRangesPipeline(newTraceKeysStore transformer.StoreReader, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull) []transformer.PipelineStage {
@@ -96,33 +126,33 @@ func TraceKeyRangesPipeline(newTraceKeysStore transformer.StoreReader, traceKeyR
 }
 
 func CalculateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var firstKey, lastKey *TraceKey
-	var expectedTraceKey []byte
+	var firstKey, lastKey, expectedTraceKey *TraceKey
 	for record := range inputChan {
-		traceKey := DecodeTraceKey(record.Key)
-		expectedNextTraceKey := EncodeTraceKey(&TraceKey{
+		var traceKey TraceKey
+		key.DecodeOrDie(record.Key, &traceKey)
+		expectedNextTraceKey := TraceKey{
 			NodeId:               traceKey.NodeId,
 			AnonymizationContext: traceKey.AnonymizationContext,
 			SessionId:            traceKey.SessionId,
 			SequenceNumber:       traceKey.SequenceNumber + 1,
-		})
+		}
 
-		if !bytes.Equal(expectedTraceKey, record.Key) {
+		if !traceKey.Equal(expectedTraceKey) {
 			if firstKey != nil {
 				outputChan <- &transformer.LevelDbRecord{
-					Key:   EncodeTraceKey(firstKey),
-					Value: EncodeTraceKey(lastKey),
+					Key:   key.EncodeOrDie(firstKey),
+					Value: key.EncodeOrDie(lastKey),
 				}
 			}
-			firstKey = traceKey
+			firstKey = &traceKey
 		}
-		lastKey = traceKey
-		expectedTraceKey = expectedNextTraceKey
+		lastKey = &traceKey
+		expectedTraceKey = &expectedNextTraceKey
 	}
 	if firstKey != nil {
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   EncodeTraceKey(firstKey),
-			Value: EncodeTraceKey(lastKey),
+			Key:   key.EncodeOrDie(firstKey),
+			Value: key.EncodeOrDie(lastKey),
 		}
 	}
 	close(outputChan)
@@ -130,32 +160,29 @@ func CalculateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbReco
 
 func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var firstBeginKey, lastEndKey *TraceKey
-	var currentSessionKey []byte
+	var currentSessionKey *SessionKey
 	for record := range inputChan {
-		beginKey := DecodeTraceKey(record.Key)
-		endKey := DecodeTraceKey(record.Value)
-		sessionKey := EncodeSessionKey(&SessionKey{
-			NodeId:               beginKey.NodeId,
-			AnonymizationContext: beginKey.AnonymizationContext,
-			SessionId:            beginKey.SessionId,
-		})
+		var beginKey, endKey TraceKey
+		key.DecodeOrDie(record.Key, &beginKey)
+		key.DecodeOrDie(record.Value, &endKey)
+		sessionKey := beginKey.SessionKey()
 
-		if !bytes.Equal(sessionKey, currentSessionKey) || beginKey.SequenceNumber != lastEndKey.SequenceNumber+1 {
+		if !sessionKey.Equal(currentSessionKey) || beginKey.SequenceNumber != lastEndKey.SequenceNumber+1 {
 			if firstBeginKey != nil && lastEndKey != nil {
 				outputChan <- &transformer.LevelDbRecord{
-					Key:   EncodeTraceKey(firstBeginKey),
-					Value: EncodeTraceKey(lastEndKey),
+					Key:   key.EncodeOrDie(firstBeginKey),
+					Value: key.EncodeOrDie(lastEndKey),
 				}
 			}
-			firstBeginKey = beginKey
+			firstBeginKey = &beginKey
 			currentSessionKey = sessionKey
 		}
-		lastEndKey = endKey
+		lastEndKey = &endKey
 	}
 	if firstBeginKey != nil && lastEndKey != nil {
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   EncodeTraceKey(firstBeginKey),
-			Value: EncodeTraceKey(lastEndKey),
+			Key:   key.EncodeOrDie(firstBeginKey),
+			Value: key.EncodeOrDie(lastEndKey),
 		}
 	}
 	close(outputChan)
@@ -164,20 +191,20 @@ func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRe
 func Sessions(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var currentSession *SessionKey
 	for record := range inputChan {
-		session := DecodeSessionKey(record.Key)
-		if currentSession == nil {
-			currentSession = session
-		}
-		if !currentSession.Equal(session) {
-			outputChan <- &transformer.LevelDbRecord{
-				Key: EncodeSessionKey(currentSession),
+		var session SessionKey
+		key.DecodeOrDie(record.Key, &session)
+		if !session.Equal(currentSession) {
+			if currentSession != nil {
+				outputChan <- &transformer.LevelDbRecord{
+					Key: key.EncodeOrDie(currentSession),
+				}
 			}
-			currentSession = session
+			currentSession = &session
 		}
 	}
 	if currentSession != nil {
 		outputChan <- &transformer.LevelDbRecord{
-			Key: EncodeSessionKey(currentSession),
+			Key: key.EncodeOrDie(currentSession),
 		}
 	}
 	close(outputChan)

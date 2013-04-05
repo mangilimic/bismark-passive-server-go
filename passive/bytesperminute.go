@@ -42,7 +42,8 @@ func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, by
 type BytesPerMinuteMapper transformer.Nonce
 
 func (nonce BytesPerMinuteMapper) Do(inputRecord *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
-	traceKey := DecodeTraceKey(inputRecord.Key)
+	var traceKey TraceKey
+	key.DecodeOrDie(inputRecord.Key, &traceKey)
 
 	trace := Trace{}
 	if err := proto.Unmarshal(inputRecord.Value, &trace); err != nil {

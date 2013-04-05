@@ -107,22 +107,24 @@ func AvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord
 	var firstTrace, lastTrace []byte
 	var expectedTraceKey []byte
 	for record := range inputChan {
-		traceKey := DecodeTraceKey(record.Key)
-		expectedNextTraceKey := EncodeTraceKey(&TraceKey{
+		var traceKey TraceKey
+		key.DecodeOrDie(record.Key, &traceKey)
+		expectedNextTraceKeyDecoded := TraceKey{
 			NodeId:               traceKey.NodeId,
 			AnonymizationContext: traceKey.AnonymizationContext,
 			SessionId:            traceKey.SessionId,
 			SequenceNumber:       traceKey.SequenceNumber + 1,
-		})
+		}
+		expectedNextTraceKey := key.EncodeOrDie(&expectedNextTraceKeyDecoded)
 
 		if !bytes.Equal(expectedTraceKey, record.Key) {
 			if firstTrace != nil {
 				writeRecord(firstKey, lastKey, firstTrace, lastTrace)
 			}
-			firstKey = traceKey
+			firstKey = &traceKey
 			firstTrace = record.Value
 		}
-		lastKey = traceKey
+		lastKey = &traceKey
 		lastTrace = record.Value
 		expectedTraceKey = expectedNextTraceKey
 	}
@@ -155,12 +157,12 @@ func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.Le
 	var previousSessionKeyEncoded []byte
 	for record := range inputChan {
 		intervalKey := DecodeIntervalKey(record.Key)
-		sessionKey := &SessionKey{
+		sessionKey := SessionKey{
 			NodeId:               intervalKey.NodeId,
 			AnonymizationContext: intervalKey.AnonymizationContext,
 			SessionId:            intervalKey.SessionId,
 		}
-		sessionKeyEncoded := EncodeSessionKey(sessionKey)
+		sessionKeyEncoded := key.EncodeOrDie(&sessionKey)
 
 		if !bytes.Equal(sessionKeyEncoded, previousSessionKeyEncoded) || intervalKey.FirstSequenceNumber != lastIntervalKey.LastSequenceNumber+1 {
 			if firstIntervalKey != nil {
@@ -272,13 +274,14 @@ func GenerateExcludedRanges(record *transformer.LevelDbRecord) *transformer.Leve
 		SequenceNumber:       intervalKey.LastSequenceNumber,
 	}
 	return &transformer.LevelDbRecord{
-		Key:   EncodeTraceKey(&newKey),
-		Value: EncodeTraceKey(&newValue),
+		Key:   key.EncodeOrDie(&newKey),
+		Value: key.EncodeOrDie(&newValue),
 	}
 }
 
 func GenerateConsistentRanges(record *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
-	intervalStartKey := DecodeTraceKey(record.Key)
+	var intervalStartKey TraceKey
+	key.DecodeOrDie(record.Key, &intervalStartKey)
 	if intervalStartKey.SequenceNumber != 0 {
 		return
 	}

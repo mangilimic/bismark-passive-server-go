@@ -3,6 +3,7 @@ package passive
 import (
 	"fmt"
 	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
 	"io/ioutil"
 	"log"
 )
@@ -12,7 +13,8 @@ func init() {
 }
 
 func formatSessionKey(sessionKey []byte) string {
-	decoded := DecodeSessionKey(sessionKey)
+	var decoded SessionKey
+	key.DecodeOrDie(sessionKey, &decoded)
 	return fmt.Sprintf("%s,%s,%d", decoded.NodeId, decoded.AnonymizationContext, decoded.SessionId)
 }
 
@@ -51,12 +53,13 @@ func makeTraceKey(nodeId, anonymizationContext string, sessionId, sequenceNumber
 		SequenceNumber:       int32(sequenceNumber),
 	}
 	return &transformer.LevelDbRecord{
-		Key: EncodeTraceKey(&traceKey),
+		Key: key.EncodeOrDie(&traceKey),
 	}
 }
 
 func formatTraceKey(traceKey []byte) string {
-	decoded := DecodeTraceKey(traceKey)
+	var decoded TraceKey
+	key.DecodeOrDie(traceKey, &decoded)
 	return fmt.Sprintf("%s,%s,%d,%d", decoded.NodeId, decoded.AnonymizationContext, decoded.SessionId, decoded.SequenceNumber)
 }
 

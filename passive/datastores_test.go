@@ -3,6 +3,7 @@ package passive
 import (
 	"fmt"
 	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
 )
 
 func makeRecordToInclude(nodeId string, sequenceNumber int32) *transformer.LevelDbRecord {
@@ -13,7 +14,7 @@ func makeRecordToInclude(nodeId string, sequenceNumber int32) *transformer.Level
 		SequenceNumber:       sequenceNumber,
 	}
 	return &transformer.LevelDbRecord{
-		Key:   EncodeTraceKey(&traceKey),
+		Key:   key.EncodeOrDie(&traceKey),
 		Value: []byte{},
 	}
 }
@@ -28,7 +29,8 @@ func runIncludeNodes(records transformer.StoreReader) {
 		if record == nil {
 			break
 		}
-		traceKey := DecodeTraceKey(record.Key)
+		var traceKey TraceKey
+		key.DecodeOrDie(record.Key, &traceKey)
 		fmt.Printf("%s %d\n", traceKey.NodeId, traceKey.SequenceNumber)
 	}
 	records.EndReading()
