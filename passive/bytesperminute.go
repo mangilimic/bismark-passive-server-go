@@ -66,34 +66,20 @@ func (nonce BytesPerMinuteMapper) Do(inputRecord *transformer.LevelDbRecord, out
 }
 
 func BytesPerMinuteReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentSize int64
-	var currentNode []byte
-	currentTimestamp := int64(-1)
-	for record := range inputChan {
-		var node []byte
-		var timestamp int64
-		key.DecodeOrDie(record.Key, &node, &timestamp)
-
-		if !bytes.Equal(node, currentNode) || timestamp != currentTimestamp {
-			if currentNode != nil && timestamp >= 0 {
-				outputChan <- &transformer.LevelDbRecord{
-					Key:   key.EncodeOrDie(currentNode, currentTimestamp),
-					Value: key.EncodeOrDie(currentSize),
-				}
-			}
-			currentNode = node
-			currentTimestamp = timestamp
-			currentSize = 0
+	var node []byte
+	var timestamp int64
+	grouper := transformer.GroupRecords(inputChan, &node, &timestamp)
+	for grouper.NextGroup() {
+		var totalSize int64
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var size int64
+			key.DecodeOrDie(record.Value, &size)
+			totalSize += size
 		}
-
-		var value int64
-		key.DecodeOrDie(record.Value, &value)
-		currentSize += value
-	}
-	if currentNode != nil && currentTimestamp >= 0 {
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie(currentNode, currentTimestamp),
-			Value: key.EncodeOrDie(currentSize),
+			Key:   key.EncodeOrDie(node, timestamp),
+			Value: key.EncodeOrDie(totalSize),
 		}
 	}
 }
