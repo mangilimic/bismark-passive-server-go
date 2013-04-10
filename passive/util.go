@@ -23,6 +23,6 @@ func truncateTimestampToHour(timestampMicroseconds int64) int64 {
 	return time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), 0, 0, 0, time.UTC).Unix()
 }
 
-func converMicrosecondsToSeconds(timestamp int64) int64 {
-    return timestamp / int64(1000000)
+func convertMicrosecondsToSeconds(timestamp int64) int64 {
+	return timestamp / int64(1000000)
 }
