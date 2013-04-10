@@ -221,9 +221,9 @@ func SessionPipelineStage(inputStore transformer.StoreReader, sessionsStore tran
 }
 
 func PrintRecords(inputChan, outputChan chan *transformer.LevelDbRecord) {
-    log.Printf("PRINT RECORDS IN DATASTORE")
-    for record := range inputChan {
-        log.Printf("%s: %s (%v: %v)", record.Key, record.Value, record.Key, record.Value)
-    }
-    log.Printf("DONE PRINTING")
+	log.Printf("PRINT RECORDS IN DATASTORE")
+	for record := range inputChan {
+		log.Printf("%s: %s (%v: %v)", record.Key, record.Value, record.Key, record.Value)
+	}
+	log.Printf("DONE PRINTING")
 }
