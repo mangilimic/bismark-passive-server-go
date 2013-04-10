@@ -1,7 +1,6 @@
 package passive
 
 import (
-	"bytes"
 	"code.google.com/p/goprotobuf/proto"
 	"database/sql"
 	"fmt"
@@ -140,184 +139,125 @@ func BytesPerDeviceMapper(record *transformer.LevelDbRecord, outputChans ...chan
 }
 
 func JoinMacAndFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentPrimaryKey, currentMacAddress []byte
-	for record := range inputChan {
-		var session SessionKey
-		var ipAddress []byte
-		var sequenceNumber int32
-		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &ipAddress)
-		key.DecodeOrDie(remainder, &sequenceNumber)
-
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			currentPrimaryKey = primaryKey
-			currentMacAddress = nil
-		}
-
-		if record.DatabaseIndex == 0 {
-			currentMacAddress = record.Value
-			continue
-		}
-		if currentMacAddress == nil {
-			continue
-		}
-		var flowIds []int32
-		key.DecodeOrDie(record.Value, &flowIds)
-		for _, flowId := range flowIds {
-			outputChan <- &transformer.LevelDbRecord{
-				Key: key.Join(key.EncodeOrDie(&session, flowId, sequenceNumber), currentMacAddress),
+	var session SessionKey
+	var ipAddress []byte
+	grouper := transformer.GroupRecords(inputChan, &session, &ipAddress)
+	for grouper.NextGroup() {
+		var currentMacAddress []byte
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			if record.DatabaseIndex == 0 {
+				currentMacAddress = record.Value
+				continue
+			}
+			if currentMacAddress == nil {
+				continue
+			}
+			var sequenceNumber int32
+			key.DecodeOrDie(record.Key, &sequenceNumber)
+			var flowIds []int32
+			key.DecodeOrDie(record.Value, &flowIds)
+			for _, flowId := range flowIds {
+				outputChan <- &transformer.LevelDbRecord{
+					Key: key.Join(key.EncodeOrDie(&session, flowId, sequenceNumber), currentMacAddress),
+				}
 			}
 		}
 	}
-	close(outputChan)
 }
 
 func FlattenMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentOutputKey []byte
-	var macAddresses [][]byte
-	for record := range inputChan {
-		var session SessionKey
-		var flowId, sequenceNumber int32
-		outputKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &flowId, &sequenceNumber)
-		var macAddress []byte
-		key.DecodeOrDie(remainder, &macAddress)
-
-		if !bytes.Equal(currentOutputKey, outputKey) {
-			if currentOutputKey != nil {
-				outputChan <- &transformer.LevelDbRecord{
-					Key:   currentOutputKey,
-					Value: key.EncodeOrDie(macAddresses),
-				}
-			}
-			currentOutputKey = outputKey
-			macAddresses = [][]byte{}
+	var session SessionKey
+	var flowId, sequenceNumber int32
+	grouper := transformer.GroupRecords(inputChan, &session, &flowId, &sequenceNumber)
+	for grouper.NextGroup() {
+		macAddresses := [][]byte{}
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var macAddress []byte
+			key.DecodeOrDie(record.Key, &macAddress)
+			macAddresses = append(macAddresses, macAddress)
 		}
-
-		macAddresses = append(macAddresses, macAddress)
-	}
-	if currentOutputKey != nil {
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   currentOutputKey,
+			Key:   key.EncodeOrDie(&session, flowId, sequenceNumber),
 			Value: key.EncodeOrDie(macAddresses),
 		}
 	}
-	close(outputChan)
 }
 
 func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentPrimaryKey []byte
-	var currentMacAddresses [][]byte
-	for record := range inputChan {
-		var session SessionKey
-		var flowId int32
-		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &flowId)
-		var sequenceNumber int32
-		key.DecodeOrDie(remainder, &sequenceNumber)
+	var session SessionKey
+	var flowId int32
+	grouper := transformer.GroupRecords(inputChan, &session, &flowId)
+	for grouper.NextGroup() {
+		var currentMacAddresses [][]byte
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			if record.DatabaseIndex == 0 {
+				key.DecodeOrDie(record.Value, &currentMacAddresses)
+				continue
+			}
+			if currentMacAddresses == nil {
+				continue
+			}
 
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			currentPrimaryKey = primaryKey
-			currentMacAddresses = nil
-		}
+			var sequenceNumber int32
+			key.DecodeOrDie(record.Key, &sequenceNumber)
+			var timestamps, sizes []int64
+			key.DecodeOrDie(record.Value, &timestamps, &sizes)
+			if len(timestamps) != len(sizes) {
+				panic(fmt.Errorf("timestamps and sizes must be the same size"))
+			}
 
-		if record.DatabaseIndex == 0 {
-			key.DecodeOrDie(record.Value, &currentMacAddresses)
-			continue
-		}
-		if currentMacAddresses == nil {
-			continue
-		}
-
-		var timestamps, sizes []int64
-		key.DecodeOrDie(record.Value, &timestamps, &sizes)
-		if len(timestamps) != len(sizes) {
-			panic(fmt.Errorf("timestamps and sizes must be the same size"))
-		}
-
-		for _, currentMacAddress := range currentMacAddresses {
-			for idx, timestamp := range timestamps {
-				outputChan <- &transformer.LevelDbRecord{
-					Key:   key.EncodeOrDie(session.NodeId, session.AnonymizationContext, session.SessionId, currentMacAddress, timestamp, flowId, sequenceNumber),
-					Value: key.EncodeOrDie(sizes[idx]),
+			for _, currentMacAddress := range currentMacAddresses {
+				for idx, timestamp := range timestamps {
+					outputChan <- &transformer.LevelDbRecord{
+						Key:   key.EncodeOrDie(&session, currentMacAddress, timestamp, flowId, sequenceNumber),
+						Value: key.EncodeOrDie(sizes[idx]),
+					}
 				}
 			}
 		}
 	}
-	close(outputChan)
 }
 
 func ReduceBytesPerDeviceSession(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	emitReducedBucket := func(session *SessionKey, macAddress []byte, timestamp, size int64) {
+	var session SessionKey
+	var macAddress []byte
+	var timestamp int64
+	grouper := transformer.GroupRecords(inputChan, &session, &macAddress, &timestamp)
+	for grouper.NextGroup() {
+		var totalSize int64
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var size int64
+			key.DecodeOrDie(record.Value, &size)
+			totalSize += size
+		}
 		outputChan <- &transformer.LevelDbRecord{
 			Key:   key.EncodeOrDie(session.NodeId, macAddress, timestamp, session.AnonymizationContext, session.SessionId),
-			Value: key.EncodeOrDie(size),
+			Value: key.EncodeOrDie(totalSize),
 		}
 	}
-
-	var currentPrimaryKey []byte
-	var currentSession *SessionKey
-	var currentMacAddress []byte
-	var currentTimestamp int64
-	var currentSize int64
-	for record := range inputChan {
-		var session SessionKey
-		var macAddress []byte
-		var timestamp int64
-		primaryKey, _ := key.DecodeAndSplitOrDie(record.Key, &session, &macAddress, &timestamp)
-
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			if currentSession != nil && currentMacAddress != nil && currentTimestamp >= 0 {
-				emitReducedBucket(currentSession, currentMacAddress, currentTimestamp, currentSize)
-			}
-			currentPrimaryKey = primaryKey
-			currentSession = &session
-			currentMacAddress = macAddress
-			currentTimestamp = timestamp
-			currentSize = 0
-		}
-
-		var size int64
-		key.DecodeOrDie(record.Value, &size)
-		currentSize += size
-	}
-	if currentSession != nil && currentMacAddress != nil && currentTimestamp >= 0 {
-		emitReducedBucket(currentSession, currentMacAddress, currentTimestamp, currentSize)
-	}
-	close(outputChan)
 }
 
 func ReduceBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	emitReducedBucket := func(nodeId, macAddress []byte, timestamp, size int64) {
+	var nodeId, macAddress []byte
+	var timestamp int64
+	grouper := transformer.GroupRecords(inputChan, &nodeId, &macAddress, &timestamp)
+	for grouper.NextGroup() {
+		var totalSize int64
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var size int64
+			key.DecodeOrDie(record.Value, &size)
+			totalSize += size
+		}
 		outputChan <- &transformer.LevelDbRecord{
 			Key:   key.EncodeOrDie(nodeId, macAddress, timestamp),
-			Value: key.EncodeOrDie(size),
+			Value: key.EncodeOrDie(totalSize),
 		}
 	}
-
-	var currentPrimaryKey, currentNodeId, currentMacAddress []byte
-	var currentTimestamp int64
-	var currentSize int64
-	for record := range inputChan {
-		var nodeId, macAddress []byte
-		var timestamp int64
-		primaryKey, _ := key.DecodeAndSplitOrDie(record.Key, &nodeId, &macAddress, &timestamp)
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			if currentNodeId != nil && currentMacAddress != nil && currentTimestamp >= 0 {
-				emitReducedBucket(currentNodeId, currentMacAddress, currentTimestamp, currentSize)
-			}
-			currentPrimaryKey = primaryKey
-			currentNodeId = nodeId
-			currentMacAddress = macAddress
-			currentTimestamp = timestamp
-			currentSize = 0
-		}
-
-		var size int64
-		key.DecodeOrDie(record.Value, &size)
-		currentSize += size
-	}
-	if currentNodeId != nil && currentMacAddress != nil && currentTimestamp >= 0 {
-		emitReducedBucket(currentNodeId, currentMacAddress, currentTimestamp, currentSize)
-	}
-	close(outputChan)
 }
 
 type BytesPerDevicePostgresStore struct {

@@ -1,12 +1,12 @@
 package passive
 
 import (
-	"bytes"
 	"code.google.com/p/goprotobuf/proto"
 	"fmt"
 	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
+	"math"
 	"regexp"
 )
 
@@ -40,7 +40,7 @@ func lookupPacketTimestampFromId(packetId int32, trace *Trace) int64 {
 	if entry.TimestampMicroseconds == nil {
 		panic(fmt.Errorf("packet series entry missing timestamp"))
 	}
-	return convertMicrosecondsToSeconds(*entry.TimestampMicroseconds)
+	return *entry.TimestampMicroseconds
 }
 
 func MapTraceToARecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
@@ -48,7 +48,7 @@ func MapTraceToARecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *t
 		if entry.AddressId == nil || entry.Domain == nil || entry.Anonymized == nil || entry.PacketId == nil || entry.Ttl == nil || entry.IpAddress == nil {
 			continue
 		}
-		packetTimestamp := lookupPacketTimestampFromId(*entry.PacketId, trace)
+		packetTimestamp := convertMicrosecondsToSeconds(lookupPacketTimestampFromId(*entry.PacketId, trace))
 		outputChan <- &transformer.LevelDbRecord{
 			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Domain, *entry.Anonymized, packetTimestamp, packetTimestamp+int64(*entry.Ttl), *entry.IpAddress),
 		}
@@ -63,42 +63,48 @@ func MapTraceToCnameRecordTable(traceKey *TraceKey, trace *Trace, outputChan cha
 		if *entry.DomainAnonymized {
 			continue
 		}
-		packetTimestamp := lookupPacketTimestampFromId(*entry.PacketId, trace)
+		packetTimestamp := convertMicrosecondsToSeconds(lookupPacketTimestampFromId(*entry.PacketId, trace))
 		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.AddressId, traceKey.SequenceNumber, *entry.Cname, *entry.CnameAnonymized, packetTimestamp, packetTimestamp+int64(*entry.Ttl), *entry.Domain),
+			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Cname, *entry.CnameAnonymized, packetTimestamp, packetTimestamp+int64(*entry.Ttl), *entry.Domain),
 		}
 	}
 }
 
 func MapTraceToFlowIpsTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
-	flowTimestamps := make(map[int32]int64)
+	// A flow's "start timestamp" is the timestamp of its first packet.
+	// Figure this out using a two step process:
+	// 1. Figure out which flow IDs started in the current trace.
+	// 2. Find the timestamp of the first packet for each of those flows.
+	flowStartTimestamps := make(map[int32]int64)
+	missingStartTimestamp := int64(math.MaxInt64)
 	for _, entry := range trace.FlowTableEntry {
 		if entry.FlowId == nil {
 			continue
 		}
-		flowTimestamps[*entry.FlowId] = -1
+		flowStartTimestamps[*entry.FlowId] = missingStartTimestamp
 	}
 	for _, entry := range trace.PacketSeries {
 		if entry.FlowId == nil || entry.TimestampMicroseconds == nil {
 			continue
 		}
-		if timestamp := flowTimestamps[*entry.FlowId]; timestamp < 0 {
-			flowTimestamps[*entry.FlowId] = *entry.TimestampMicroseconds
+		if timestamp, ok := flowStartTimestamps[*entry.FlowId]; ok {
+			flowStartTimestamps[*entry.FlowId] = minInt64(timestamp, *entry.TimestampMicroseconds)
 		}
 	}
+
 	for _, entry := range trace.FlowTableEntry {
 		if entry.SourceIp == nil || entry.DestinationIp == nil || entry.FlowId == nil {
 			continue
 		}
-		timestamp, timestampOk := flowTimestamps[*entry.FlowId]
-		if !timestampOk {
+		timestamp, timestampOk := flowStartTimestamps[*entry.FlowId]
+		if !timestampOk || timestamp == missingStartTimestamp {
 			continue
 		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.SourceIp, *entry.DestinationIp, traceKey.SequenceNumber, timestamp, *entry.FlowId),
+			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.SourceIp, traceKey.SequenceNumber, timestamp, *entry.FlowId),
 		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.DestinationIp, *entry.SourceIp, traceKey.SequenceNumber, timestamp, *entry.FlowId),
+			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.DestinationIp, traceKey.SequenceNumber, timestamp, *entry.FlowId, *entry.SourceIp),
 		}
 	}
 }
@@ -109,28 +115,29 @@ func MapTraceToAddressIpTable(traceKey *TraceKey, trace *Trace, outputChan chan 
 			continue
 		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.IpAddress, traceKey.SequenceNumber),
+			Key:   key.EncodeOrDie(traceKey.SessionKey(), *entry.IpAddress, traceKey.SequenceNumber),
 			Value: key.EncodeOrDie(*entry.MacAddress),
 		}
 	}
 }
 
 func MapTraceToBytesPerTimestampSharded(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
-	buckets := make(map[int32]map[int64]int64)
+	flowIdAndTimestampToSize := make(map[int32]map[int64]int64)
 	for _, packetSeriesEntry := range trace.PacketSeries {
 		if packetSeriesEntry.FlowId == nil || packetSeriesEntry.TimestampMicroseconds == nil || packetSeriesEntry.Size == nil {
 			continue
 		}
-		hourTimestamp := truncateTimestampToHour(*packetSeriesEntry.TimestampMicroseconds)
-		if _, ok := buckets[*packetSeriesEntry.FlowId]; !ok {
-			buckets[*packetSeriesEntry.FlowId] = make(map[int64]int64)
+		if _, ok := flowIdAndTimestampToSize[*packetSeriesEntry.FlowId]; !ok {
+			flowIdAndTimestampToSize[*packetSeriesEntry.FlowId] = make(map[int64]int64)
 		}
-		buckets[*packetSeriesEntry.FlowId][hourTimestamp] += int64(*packetSeriesEntry.Size)
+		hourTimestamp := truncateTimestampToHour(*packetSeriesEntry.TimestampMicroseconds)
+		flowIdAndTimestampToSize[*packetSeriesEntry.FlowId][hourTimestamp] += int64(*packetSeriesEntry.Size)
 	}
-	for flowId, timestampBuckets := range buckets {
-		for timestamp, size := range timestampBuckets {
+
+	for flowId, timestamps := range flowIdAndTimestampToSize {
+		for timestamp, size := range timestamps {
 			outputChan <- &transformer.LevelDbRecord{
-				Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber, timestamp),
+				Key:   key.EncodeOrDie(traceKey.SessionKey(), flowId, traceKey.SequenceNumber, timestamp),
 				Value: key.EncodeOrDie(size),
 			}
 		}
@@ -138,12 +145,11 @@ func MapTraceToBytesPerTimestampSharded(traceKey *TraceKey, trace *Trace, output
 }
 
 func MapTraceToWhitelist(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
-	if traceKey.SequenceNumber > 0 {
-		return
-	}
-	outputChan <- &transformer.LevelDbRecord{
-		Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId),
-		Value: key.EncodeOrDie(trace.Whitelist),
+	if traceKey.SequenceNumber == 0 {
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie(traceKey.SessionKey()),
+			Value: key.EncodeOrDie(trace.Whitelist),
+		}
 	}
 }
 
@@ -172,57 +178,75 @@ func BytesPerDomainMapper(record *transformer.LevelDbRecord, outputChans ...chan
 }
 
 func JoinAddressIdsWithMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentPrimaryKey []byte
-	var currentSession *SessionKey
-	var currentMacAddress []byte
-	for record := range inputChan {
-		var session SessionKey
-		var addressId int32
-		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &addressId)
-
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			currentPrimaryKey = primaryKey
-			currentSession = &session
-			currentMacAddress = nil
-		}
-
-		if record.DatabaseIndex == 0 {
-			currentMacAddress = record.Value
-			continue
-		}
-		if currentMacAddress == nil {
-			continue
-		}
-		outputChan <- &transformer.LevelDbRecord{
-			Key: key.Join(key.EncodeOrDie(currentSession), currentMacAddress, remainder),
+	var (
+		session   SessionKey
+		addressId int32
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &addressId)
+	for grouper.NextGroup() {
+		var macAddress []byte
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			switch record.DatabaseIndex {
+			case 0:
+				macAddress = record.Value
+			case 1:
+				if macAddress != nil {
+					var unusedSequenceNumber int32
+					remainder := key.DecodeOrDie(record.Key, &unusedSequenceNumber)
+					outputChan <- &transformer.LevelDbRecord{
+						Key: key.Join(key.EncodeOrDie(&session), macAddress, remainder),
+					}
+				}
+			}
 		}
 	}
-	close(outputChan)
 }
 
 func EmitARecords(record *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
-	var session SessionKey
-	var macAddress, domain []byte
-	var anonymized bool
-	var startTimestamp, endTimestamp int64
-	var ipAddress []byte
+	var (
+		session                      SessionKey
+		macAddress, domain           []byte
+		anonymized                   bool
+		startTimestamp, endTimestamp int64
+		ipAddress                    []byte
+	)
 	key.DecodeOrDie(record.Key, &session, &macAddress, &domain, &anonymized, &startTimestamp, &endTimestamp, &ipAddress)
 
 	if anonymized {
 		return
 	}
 	outputChan <- &transformer.LevelDbRecord{
-		Key: key.EncodeOrDie(session, macAddress, ipAddress, startTimestamp, endTimestamp, domain),
+		Key: key.EncodeOrDie(session, domain, macAddress, ipAddress, startTimestamp, endTimestamp),
 	}
 }
 
-type dnsRecord struct {
-	startTimestamp, endTimestamp int64
-	value                        []byte
-}
-
 func JoinARecordsWithCnameRecords(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	emitIntersectingRecords := func(keyPrefix []byte, aRecords, cnameRecords []dnsRecord) {
+	var (
+		session            SessionKey
+		macAddress, domain []byte
+		anonymized         bool
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &macAddress, &domain, &anonymized)
+	for grouper.NextGroup() {
+		type dnsRecord struct {
+			startTimestamp, endTimestamp int64
+			value                        []byte
+		}
+		var aRecords, cnameRecords []dnsRecord
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var newDnsRecord dnsRecord
+			key.DecodeOrDie(record.Key, &newDnsRecord.startTimestamp, &newDnsRecord.endTimestamp, &newDnsRecord.value)
+			switch record.DatabaseIndex {
+			case 0:
+				aRecords = append(aRecords, newDnsRecord)
+			case 1:
+				cnameRecords = append(cnameRecords, newDnsRecord)
+			default:
+				panic(fmt.Errorf("Invalid DatabaseIndex: %d", record.DatabaseIndex))
+			}
+		}
 		for _, aRecord := range aRecords {
 			for _, cnameRecord := range cnameRecords {
 				startTimestamp := maxInt64(aRecord.startTimestamp, cnameRecord.startTimestamp)
@@ -231,213 +255,171 @@ func JoinARecordsWithCnameRecords(inputChan, outputChan chan *transformer.LevelD
 					continue
 				}
 				outputChan <- &transformer.LevelDbRecord{
-					Key: key.Join(keyPrefix, key.EncodeOrDie(aRecord.value, startTimestamp, endTimestamp, cnameRecord.value)),
+					Key: key.EncodeOrDie(session, cnameRecord.value, macAddress, aRecord.value, startTimestamp, endTimestamp),
 				}
 			}
 		}
 	}
-
-	var currentPrimaryKey []byte
-	var currentSession *SessionKey
-	var currentMacAddress []byte
-	var aRecords, cnameRecords []dnsRecord
-	for record := range inputChan {
-		var session SessionKey
-		var macAddress, domain []byte
-		var anonymized bool
-		var startTimestamp, endTimestamp int64
-		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &macAddress, &domain, &anonymized)
-		domainOrIpRemainder := key.DecodeOrDie(remainder, &startTimestamp, &endTimestamp)
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			if currentSession != nil && currentMacAddress != nil {
-				emitIntersectingRecords(key.EncodeOrDie(currentSession, currentMacAddress), aRecords, cnameRecords)
-			}
-			currentPrimaryKey = primaryKey
-			currentSession = &session
-			currentMacAddress = macAddress
-			aRecords = nil
-			cnameRecords = nil
-		}
-		switch record.DatabaseIndex {
-		case 0:
-			var ipAddress []byte
-			key.DecodeOrDie(domainOrIpRemainder, &ipAddress)
-			aRecords = append(aRecords, dnsRecord{startTimestamp, endTimestamp, ipAddress})
-		case 1:
-			var domainValue []byte
-			key.DecodeOrDie(domainOrIpRemainder, &domainValue)
-			cnameRecords = append(cnameRecords, dnsRecord{startTimestamp, endTimestamp, domainValue})
-		}
-	}
-	if currentSession != nil && currentMacAddress != nil {
-		emitIntersectingRecords(key.EncodeOrDie(currentSession, currentMacAddress), aRecords, cnameRecords)
-	}
-	close(outputChan)
 }
 
 func JoinDomainsWithWhitelist(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var whitelistRegexps map[string]*regexp.Regexp
-	var currentSession *SessionKey
-	for record := range inputChan {
-		var session SessionKey
-		remainder := key.DecodeOrDie(record.Key, &session)
-		if !session.Equal(currentSession) {
-			currentSession = &session
-			whitelistRegexps = nil
-		}
+	var session SessionKey
+	grouper := transformer.GroupRecords(inputChan, &session)
+	for grouper.NextGroup() {
+		var whitelistRegexps map[string]*regexp.Regexp
+		for grouper.NextRecord() {
+			record := grouper.Read()
 
-		if record.DatabaseIndex == 0 {
-			whitelistRegexps = make(map[string]*regexp.Regexp)
-			var whitelist []string
-			key.DecodeOrDie(record.Value, &whitelist)
-			for _, domain := range whitelist {
-				compiledRegexp, err := regexp.Compile(fmt.Sprintf(`(^|\.)%s$`, regexp.QuoteMeta(domain)))
-				if err != nil {
-					panic(fmt.Errorf("Cannot compile whitelist regexp: %s", err))
+			switch record.DatabaseIndex {
+			case 0:
+				whitelistRegexps = make(map[string]*regexp.Regexp)
+				var whitelist []string
+				key.DecodeOrDie(record.Value, &whitelist)
+				for _, domain := range whitelist {
+					compiledRegexp, err := regexp.Compile(fmt.Sprintf(`(^|\.)%s$`, regexp.QuoteMeta(domain)))
+					if err != nil {
+						panic(fmt.Errorf("Cannot compile whitelist regexp: %s", err))
+					}
+					whitelistRegexps[domain] = compiledRegexp
 				}
-				whitelistRegexps[domain] = compiledRegexp
-			}
-			continue
-		}
-
-		if whitelistRegexps == nil {
-			continue
-		}
-
-		var macAddress []byte
-		var startTimestamp, endTimestamp int64
-		var domain []byte
-		key.DecodeOrDie(remainder, &macAddress, &startTimestamp, &endTimestamp, &domain)
-
-		currentKey := key.EncodeOrDie(session, macAddress, startTimestamp, endTimestamp)
-
-		for whitelistDomain, whitelistRegexp := range whitelistRegexps {
-			if !whitelistRegexp.Match(domain) {
-				continue
-			}
-			outputChan <- &transformer.LevelDbRecord{
-				Key: key.Join(currentKey, key.EncodeOrDie(whitelistDomain)),
+			case 1:
+				if whitelistRegexps != nil {
+					var domain []byte
+					remainder := key.DecodeOrDie(record.Key, &domain)
+					for whitelistDomain, whitelistRegexp := range whitelistRegexps {
+						if !whitelistRegexp.Match(domain) {
+							continue
+						}
+						outputChan <- &transformer.LevelDbRecord{
+							Key: key.Join(grouper.CurrentGroupPrefix, remainder, key.EncodeOrDie(whitelistDomain)),
+						}
+					}
+				}
 			}
 		}
 	}
-	close(outputChan)
 }
 
 func JoinMacWithFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentSession *SessionKey
-	var currentPrimaryKey, currentLocalIp, currentMacAddress []byte
-	for record := range inputChan {
-		var session SessionKey
-		var localIp []byte
-		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &localIp)
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			currentPrimaryKey = primaryKey
-			currentSession = &session
-			currentLocalIp = nil
-			currentMacAddress = nil
-		}
-		if record.DatabaseIndex == 0 {
-			currentLocalIp = localIp
-			key.DecodeOrDie(record.Value, &currentMacAddress)
-			continue
-		}
-
-		if currentLocalIp == nil || currentMacAddress == nil {
-			continue
-		}
-
-		var remoteIp []byte
-		var sequenceNumber int32
-		var timestamp int64
-		var flowId int32
-		key.DecodeOrDie(remainder, &remoteIp, &sequenceNumber, &timestamp, &flowId)
-		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(currentSession, currentMacAddress, remoteIp, timestamp, sequenceNumber, flowId),
+	var (
+		session SessionKey
+		localIp []byte
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &localIp)
+	for grouper.NextGroup() {
+		var macAddress []byte
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			switch record.DatabaseIndex {
+			case 0:
+				key.DecodeOrDie(record.Value, &macAddress)
+			case 1:
+				if macAddress != nil {
+					var (
+						remoteIp       []byte
+						sequenceNumber int32
+						timestamp      int64
+						flowId         int32
+					)
+					key.DecodeOrDie(record.Key, &sequenceNumber, &remoteIp, &timestamp, &flowId)
+					outputChan <- &transformer.LevelDbRecord{
+						Key: key.EncodeOrDie(&session, macAddress, remoteIp, timestamp, int64(math.MaxInt64), sequenceNumber, flowId),
+					}
+				}
+			}
 		}
 	}
-	close(outputChan)
-}
-
-type timestampTuple struct {
-	start, end int64
-	domain     []byte
 }
 
 func JoinWhitelistedDomainsWithFlows(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentSession *SessionKey
-	var currentPrimaryKey, currentMacAddress []byte
-	var currentDomains []timestampTuple
-	for record := range inputChan {
-		var session SessionKey
-		var macAddress, remoteIp []byte
-		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &macAddress, &remoteIp)
-
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			currentPrimaryKey = primaryKey
-			currentSession = &session
-			currentMacAddress = macAddress
-			currentDomains = nil
+	var (
+		session              SessionKey
+		macAddress, remoteIp []byte
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &macAddress, &remoteIp)
+	for grouper.NextGroup() {
+		type timestampsAndDomain struct {
+			start, end int64
+			domain     []byte
 		}
+		var domains []*timestampsAndDomain
+		for grouper.NextRecord() {
+			record := grouper.Read()
 
-		if record.DatabaseIndex == 0 {
-			var startTimestamp, endTimestamp int64
-			var domain []byte
-			key.DecodeOrDie(remainder, &startTimestamp, &endTimestamp, &domain)
-			currentDomains = append(currentDomains, timestampTuple{startTimestamp, endTimestamp, domain})
-			continue
-		}
-
-		var timestamp int64
-		var sequenceNumber int32
-		var flowId int32
-		key.DecodeOrDie(remainder, &timestamp, &sequenceNumber, &flowId)
-
-		for _, entry := range currentDomains {
-			if entry.start <= timestamp && entry.end >= timestamp {
-				outputChan <- &transformer.LevelDbRecord{
-					Key: key.EncodeOrDie(currentSession, flowId, sequenceNumber, entry.domain, currentMacAddress),
+			switch record.DatabaseIndex {
+			case 0:
+				var newEntry timestampsAndDomain
+				key.DecodeOrDie(record.Key, &newEntry.start, &newEntry.end, &newEntry.domain)
+				domains = append(domains, &newEntry)
+			case 1:
+				if domains != nil {
+					var (
+						timestamp, unusedInfinity int64
+						sequenceNumber, flowId    int32
+					)
+					key.DecodeOrDie(record.Key, &timestamp, &unusedInfinity, &sequenceNumber, &flowId)
+					for _, entry := range domains {
+						if entry.start <= timestamp && entry.end >= timestamp {
+							outputChan <- &transformer.LevelDbRecord{
+								Key: key.EncodeOrDie(&session, flowId, sequenceNumber, int16(0), entry.domain, macAddress),
+							}
+						}
+					}
 				}
 			}
+		}
+	}
+}
+
+func GroupDomainsAndMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	var (
+		session                SessionKey
+		sequenceNumber, flowId int32
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &sequenceNumber, &flowId)
+	for grouper.NextGroup() {
+		var domains, macAddresses [][]byte
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var domain, macAddress []byte
+			key.DecodeOrDie(record.Key, &domain, &macAddress)
+			domains = append(domains, domain)
+			macAddresses = append(macAddresses, macAddress)
+		}
+		outputChan <- &transformer.LevelDbRecord{
+			Key:   grouper.CurrentGroupPrefix,
+			Value: key.EncodeOrDie(domains, macAddresses),
 		}
 	}
 }
 
 func JoinDomainsWithSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	var currentPrimaryKey []byte
-	var currentSession *SessionKey
-	var currentSequenceNumber int32
-	var currentDomains map[string][]string
-	for record := range inputChan {
-		var session SessionKey
-		var sequenceNumber, flowId int32
-		primaryKey, remainder := key.DecodeAndSplitOrDie(record.Key, &session, &flowId)
-		key.DecodeOrDie(remainder, &sequenceNumber)
+	var (
+		session SessionKey
+		flowId  int32
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &flowId)
+	for grouper.NextGroup() {
+		var domains, macAddresses []string
+		for grouper.NextRecord() {
+			record := grouper.Read()
 
-		if !bytes.Equal(primaryKey, currentPrimaryKey) {
-			currentPrimaryKey = primaryKey
-			currentSession = &session
-			currentDomains = make(map[string][]string)
-		}
-
-		switch record.DatabaseIndex {
-		case 0:
-			if currentSequenceNumber != sequenceNumber {
-				currentSequenceNumber = sequenceNumber
-				currentDomains = make(map[string][]string)
-			}
-
-			var domain, macAddress string
-			key.DecodeOrDie(remainder, &domain, &macAddress)
-			currentDomains[macAddress] = append(currentDomains[macAddress], domain)
-		case 1:
-			var timestamp int64
-			key.DecodeOrDie(remainder, &timestamp)
-
-			for macAddress, domains := range currentDomains {
-				for _, domain := range domains {
-					outputChan <- &transformer.LevelDbRecord{
-						Key:   key.EncodeOrDie(currentSession, domain, timestamp, macAddress, flowId, sequenceNumber),
-						Value: record.Value,
+			switch record.DatabaseIndex {
+			case 0:
+				key.DecodeOrDie(record.Value, domains, macAddresses)
+			case 1:
+				if domains != nil && macAddresses != nil {
+					var (
+						sequenceNumber int32
+						timestamp      int64
+					)
+					key.DecodeOrDie(record.Key, &sequenceNumber, &timestamp)
+					for idx, domain := range domains {
+						macAddress := macAddresses[idx]
+						outputChan <- &transformer.LevelDbRecord{
+							Key:   key.EncodeOrDie(&session, macAddress, domain, timestamp, flowId, sequenceNumber),
+							Value: record.Value,
+						}
 					}
 				}
 			}
@@ -446,72 +428,46 @@ func JoinDomainsWithSizes(inputChan, outputChan chan *transformer.LevelDbRecord)
 }
 
 func FlattenIntoBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	emitSize := func(session *SessionKey, macAddress, domain []byte, timestamp, size int64) {
+	var (
+		session    SessionKey
+		domain     []byte
+		timestamp  int64
+		macAddress []byte
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &domain, &timestamp, &macAddress)
+	for grouper.NextGroup() {
+		var totalSize int64
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var size int64
+			key.DecodeOrDie(record.Value, &size)
+			totalSize += size
+		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie(session, macAddress, domain, timestamp),
-			Value: key.EncodeOrDie(size),
+			Key:   grouper.CurrentGroupPrefix,
+			Value: key.EncodeOrDie(totalSize),
 		}
-	}
-
-	var currentPrimaryKey []byte
-	var currentSession *SessionKey
-	var currentDomain []byte
-	var currentTimestamp int64
-	var currentMacAddress []byte
-	var currentSize int64
-	for record := range inputChan {
-		var session SessionKey
-		var domain []byte
-		var timestamp int64
-		var macAddress []byte
-		primaryKey, _ := key.DecodeAndSplitOrDie(record.Key, &session, &domain, &timestamp, &macAddress)
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			if currentPrimaryKey != nil {
-				emitSize(currentSession, currentMacAddress, currentDomain, currentTimestamp, currentSize)
-			}
-			currentPrimaryKey = primaryKey
-			currentSession = &session
-			currentMacAddress = macAddress
-			currentDomain = domain
-			currentTimestamp = timestamp
-			currentSize = 0
-		}
-		var size int64
-		key.DecodeOrDie(record.Value, &size)
-		currentSize += size
-	}
-	if currentPrimaryKey != nil {
-		emitSize(currentSession, currentMacAddress, currentDomain, currentTimestamp, currentSize)
 	}
 }
 
 func FlattenIntoBytesPerTimestamp(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	emitSize := func(primaryKey []byte, size int64) {
+	var (
+		session   SessionKey
+		domain    []byte
+		timestamp int64
+	)
+	grouper := transformer.GroupRecords(inputChan, &session, &domain, &timestamp)
+	for grouper.NextGroup() {
+		var totalSize int64
+		for grouper.NextRecord() {
+			record := grouper.Read()
+			var size int64
+			key.DecodeOrDie(record.Value, &size)
+			totalSize += size
+		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   primaryKey,
-			Value: key.EncodeOrDie(size),
+			Key:   key.EncodeOrDie(session, domain, timestamp),
+			Value: key.EncodeOrDie(totalSize),
 		}
-	}
-
-	var currentPrimaryKey []byte
-	var currentSize int64
-	for record := range inputChan {
-		var session SessionKey
-		var domain []byte
-		var timestamp int64
-		primaryKey, _ := key.DecodeAndSplitOrDie(record.Key, &session, &domain, &timestamp)
-		if !bytes.Equal(currentPrimaryKey, primaryKey) {
-			if currentPrimaryKey != nil {
-				emitSize(currentPrimaryKey, currentSize)
-			}
-			currentPrimaryKey = primaryKey
-			currentSize = 0
-		}
-		var size int64
-		key.DecodeOrDie(record.Value, &size)
-		currentSize += size
-	}
-	if currentPrimaryKey != nil {
-		emitSize(currentPrimaryKey, currentSize)
 	}
 }
