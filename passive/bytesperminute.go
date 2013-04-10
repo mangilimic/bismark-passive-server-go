@@ -96,7 +96,6 @@ func BytesPerMinuteReducer(inputChan, outputChan chan *transformer.LevelDbRecord
 			Value: key.EncodeOrDie(currentSize),
 		}
 	}
-	close(outputChan)
 }
 
 func getHour(timestamp int64) int64 {
@@ -137,7 +136,6 @@ func BytesPerHourReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 			Value: key.EncodeOrDie(currentSize),
 		}
 	}
-	close(outputChan)
 }
 
 type BytesPerHourPostgresStore struct {

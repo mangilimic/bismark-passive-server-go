@@ -131,7 +131,6 @@ func AvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord
 	if firstTrace != nil {
 		writeRecord(firstKey, lastKey, firstTrace, lastTrace)
 	}
-	close(outputChan)
 }
 
 func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord) {
@@ -178,7 +177,6 @@ func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.Le
 	if firstIntervalKey != nil {
 		writeRecord(firstIntervalKey, lastIntervalKey, firstInterval, lastInterval)
 	}
-	close(outputChan)
 }
 
 func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
@@ -219,7 +217,6 @@ func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 	if currentNode != nil {
 		writeRecord(currentNode, points)
 	}
-	close(outputChan)
 }
 
 type AvailabilityJsonStore struct {

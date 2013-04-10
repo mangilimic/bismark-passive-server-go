@@ -112,7 +112,6 @@ func AggregateStatisticsReducer(inputChan, outputChan chan *transformer.LevelDbR
 	if currentNodeId != nil && currentStatistics != nil {
 		writeNodeStatistics(currentNodeId, currentStatistics)
 	}
-	close(outputChan)
 }
 
 type AggregateStatisticsJsonStore struct {

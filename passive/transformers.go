@@ -156,7 +156,6 @@ func CalculateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbReco
 			Value: key.EncodeOrDie(lastKey),
 		}
 	}
-	close(outputChan)
 }
 
 func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRecord) {
@@ -186,7 +185,6 @@ func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRe
 			Value: key.EncodeOrDie(lastEndKey),
 		}
 	}
-	close(outputChan)
 }
 
 func Sessions(inputChan, outputChan chan *transformer.LevelDbRecord) {
@@ -208,7 +206,6 @@ func Sessions(inputChan, outputChan chan *transformer.LevelDbRecord) {
 			Key: key.EncodeOrDie(currentSession),
 		}
 	}
-	close(outputChan)
 }
 
 func SessionPipelineStage(inputStore transformer.StoreReader, sessionsStore transformer.StoreDeleter) transformer.PipelineStage {

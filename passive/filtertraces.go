@@ -44,5 +44,4 @@ func (parameters FilterSessions) Do(inputChan, outputChan chan *transformer.Leve
 			outputChan <- record
 		}
 	}
-	close(outputChan)
 }
