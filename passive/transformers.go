@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
+	"log"
 )
 
 type TraceKey struct {
@@ -217,4 +218,12 @@ func SessionPipelineStage(inputStore transformer.StoreReader, sessionsStore tran
 		Reader:      inputStore,
 		Writer:      transformer.TruncateBeforeWriting(sessionsStore),
 	}
+}
+
+func PrintRecords(inputChan, outputChan chan *transformer.LevelDbRecord) {
+    log.Printf("PRINT RECORDS IN DATASTORE")
+    for record := range inputChan {
+        log.Printf("%s: %s (%v: %v)", record.Key, record.Value, record.Key, record.Value)
+    }
+    log.Printf("DONE PRINTING")
 }
