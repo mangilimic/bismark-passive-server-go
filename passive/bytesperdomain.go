@@ -1,13 +1,13 @@
 package passive
 
 import (
+	"bytes"
 	"code.google.com/p/goprotobuf/proto"
 	"fmt"
 	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
 	"math"
-	"regexp"
 )
 
 type BytesPerDomainPipelineStores struct {
@@ -370,31 +370,23 @@ func JoinARecordsWithCnameRecords(inputChan, outputChan chan *transformer.LevelD
 }
 
 func JoinDomainsWithWhitelist(inputChan, outputChan chan *transformer.LevelDbRecord) {
+	dotPrefix := []byte(".")
 	var session SessionKey
 	grouper := transformer.GroupRecords(inputChan, &session)
 	for grouper.NextGroup() {
-		var whitelistRegexps map[string]*regexp.Regexp
+		var whitelist [][]byte
 		for grouper.NextRecord() {
 			record := grouper.Read()
 
 			switch record.DatabaseIndex {
 			case 0:
-				whitelistRegexps = make(map[string]*regexp.Regexp)
-				var whitelist []string
 				key.DecodeOrDie(record.Value, &whitelist)
-				for _, domain := range whitelist {
-					compiledRegexp, err := regexp.Compile(fmt.Sprintf(`(^|\.)%s$`, regexp.QuoteMeta(domain)))
-					if err != nil {
-						panic(fmt.Errorf("Cannot compile whitelist regexp: %s", err))
-					}
-					whitelistRegexps[domain] = compiledRegexp
-				}
 			case 1:
-				if whitelistRegexps != nil {
+				if whitelist != nil {
 					var domain []byte
 					remainder := key.DecodeOrDie(record.Key, &domain)
-					for whitelistDomain, whitelistRegexp := range whitelistRegexps {
-						if !whitelistRegexp.Match(domain) {
+					for _, whitelistDomain := range whitelist {
+						if !bytes.Equal(domain, whitelistDomain) && !bytes.HasSuffix(domain, append(dotPrefix, whitelistDomain...)) {
 							continue
 						}
 						outputChan <- &transformer.LevelDbRecord{
