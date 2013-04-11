@@ -269,6 +269,8 @@ func ExampleBytesPerDomain_domains() {
 			"foo.bar.gorp",
 			"bar.gorp",
 			"gorp",
+			"orp",
+			"foobar.gorp",
 		},
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
