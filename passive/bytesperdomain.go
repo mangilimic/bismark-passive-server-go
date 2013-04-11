@@ -10,6 +10,108 @@ import (
 	"regexp"
 )
 
+type BytesPerDomainPipelineStores struct {
+	Traces                                     transformer.StoreSeeker
+	AvailabilityIntervals                      transformer.StoreSeeker
+	TraceKeyRanges, ConsolidatedTraceKeyRanges transformer.DatastoreFull
+
+	// Outputs of the first stage.
+	AddressIdTable           transformer.DatastoreFull
+	ARecordTable             transformer.DatastoreFull
+	CnameRecordTable         transformer.DatastoreFull
+	FlowIpsTable             transformer.DatastoreFull
+	AddressIpTable           transformer.DatastoreFull
+	BytesPerTimestampSharded transformer.DatastoreFull
+	Whitelist                transformer.DatastoreFull
+
+	ARecordsWithMac, CnameRecordsWithMac, AllDnsMappings, AllWhitelistedMappings transformer.DatastoreFull
+	FlowMacsTable, FlowDomainsTable, FlowDomainsGroupedTable                     transformer.DatastoreFull
+
+	BytesPerDomainSharded                   transformer.Datastore
+	BytesPerDomainPerDevice, BytesPerDomain transformer.Datastore
+
+	Sessions transformer.DatastoreFull
+}
+
+func BytesPerDomainPipeline(stores *BytesPerDomainPipelineStores, workers int) []transformer.PipelineStage {
+	newTracesStore := transformer.ReadExcludingRanges(transformer.ReadIncludingRanges(stores.Traces, stores.AvailabilityIntervals), stores.TraceKeyRanges)
+	return append([]transformer.PipelineStage{
+		transformer.PipelineStage{
+			Name:        "BytesPerDomainMapper",
+			Reader:      newTracesStore,
+			Transformer: transformer.MakeMultipleOutputsDoFunc(BytesPerDomainMapper, 7, workers),
+			Writer:      transformer.NewMuxedStoreWriter(stores.AddressIdTable, stores.ARecordTable, stores.CnameRecordTable, stores.FlowIpsTable, stores.AddressIpTable, stores.BytesPerTimestampSharded, stores.Whitelist),
+		},
+		SessionPipelineStage(newTracesStore, stores.Sessions),
+		transformer.PipelineStage{
+			Name:        "JoinAAddressIdsWithMacAddresses",
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AddressIdTable, stores.ARecordTable), stores.Sessions),
+			Transformer: transformer.TransformFunc(JoinAddressIdsWithMacAddresses),
+			Writer:      stores.ARecordsWithMac,
+		},
+		transformer.PipelineStage{
+			Name:        "JoinCnameAddressIdsWithMacAddresses",
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AddressIdTable, stores.CnameRecordTable), stores.Sessions),
+			Transformer: transformer.TransformFunc(JoinAddressIdsWithMacAddresses),
+			Writer:      stores.CnameRecordsWithMac,
+		},
+		transformer.PipelineStage{
+			Name:        "JoinARecordsWithCnameRecords",
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.ARecordsWithMac, stores.CnameRecordsWithMac), stores.Sessions),
+			Transformer: transformer.TransformFunc(JoinARecordsWithCnameRecords),
+			Writer:      stores.AllDnsMappings,
+		},
+		transformer.PipelineStage{
+			Name:        "EmitARecords",
+			Reader:      transformer.ReadIncludingPrefixes(stores.ARecordsWithMac, stores.Sessions),
+			Transformer: transformer.MakeDoFunc(EmitARecords, workers),
+			Writer:      stores.AllDnsMappings,
+		},
+		transformer.PipelineStage{
+			Name:        "JoinDomainsWithWhitelist",
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.Whitelist, stores.AllDnsMappings), stores.Sessions),
+			Transformer: transformer.TransformFunc(JoinDomainsWithWhitelist),
+			Writer:      stores.AllWhitelistedMappings,
+		},
+		transformer.PipelineStage{
+			Name:        "JoinMacWithFlowId",
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AddressIpTable, stores.FlowIpsTable), stores.Sessions),
+			Transformer: transformer.TransformFunc(JoinMacWithFlowId),
+			Writer:      stores.FlowMacsTable,
+		},
+		transformer.PipelineStage{
+			Name:        "JoinWhitelistedDomainsWithFlows",
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AllWhitelistedMappings, stores.FlowMacsTable), stores.Sessions),
+			Transformer: transformer.TransformFunc(JoinWhitelistedDomainsWithFlows),
+			Writer:      stores.FlowDomainsTable,
+		},
+		transformer.PipelineStage{
+			Name:        "GroupDomainsAndMacAddresses",
+			Reader:      transformer.ReadIncludingPrefixes(stores.FlowDomainsTable, stores.Sessions),
+			Transformer: transformer.TransformFunc(GroupDomainsAndMacAddresses),
+			Writer:      stores.FlowDomainsGroupedTable,
+		},
+		transformer.PipelineStage{
+			Name:        "JoinDomainsWithSizes",
+			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.FlowDomainsGroupedTable, stores.BytesPerTimestampSharded), stores.Sessions),
+			Transformer: transformer.TransformFunc(JoinDomainsWithSizes),
+			Writer:      stores.BytesPerDomainSharded,
+		},
+		transformer.PipelineStage{
+			Name:        "FlattenIntoBytesPerDevice",
+			Reader:      stores.BytesPerDomainSharded,
+			Transformer: transformer.TransformFunc(FlattenIntoBytesPerDevice),
+			Writer:      stores.BytesPerDomainPerDevice,
+		},
+		transformer.PipelineStage{
+			Name:        "FlattenIntoBytesPerTimestamp",
+			Reader:      stores.BytesPerDomainSharded,
+			Transformer: transformer.TransformFunc(FlattenIntoBytesPerTimestamp),
+			Writer:      stores.BytesPerDomain,
+		},
+	}, TraceKeyRangesPipeline(newTracesStore, stores.TraceKeyRanges, stores.ConsolidatedTraceKeyRanges)...)
+}
+
 func MapTraceToAddressIdTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
 	if trace.AddressTableFirstId == nil || trace.AddressTableSize == nil {
 		panic("AddressTableFirstId and AddressTableSize must be present in all traces")
@@ -48,9 +150,10 @@ func MapTraceToARecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *t
 		if entry.AddressId == nil || entry.Domain == nil || entry.Anonymized == nil || entry.PacketId == nil || entry.Ttl == nil || entry.IpAddress == nil {
 			continue
 		}
-		packetTimestamp := convertMicrosecondsToSeconds(lookupPacketTimestampFromId(*entry.PacketId, trace))
+		packetTimestamp := lookupPacketTimestampFromId(*entry.PacketId, trace)
+		ttl := convertSecondsToMicroseconds(int64(*entry.Ttl))
 		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Domain, *entry.Anonymized, packetTimestamp, packetTimestamp+int64(*entry.Ttl), *entry.IpAddress),
+			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Domain, *entry.Anonymized, packetTimestamp, packetTimestamp+ttl, *entry.IpAddress),
 		}
 	}
 }
@@ -63,9 +166,10 @@ func MapTraceToCnameRecordTable(traceKey *TraceKey, trace *Trace, outputChan cha
 		if *entry.DomainAnonymized {
 			continue
 		}
-		packetTimestamp := convertMicrosecondsToSeconds(lookupPacketTimestampFromId(*entry.PacketId, trace))
+		packetTimestamp := lookupPacketTimestampFromId(*entry.PacketId, trace)
+		ttl := convertSecondsToMicroseconds(int64(*entry.Ttl))
 		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Cname, *entry.CnameAnonymized, packetTimestamp, packetTimestamp+int64(*entry.Ttl), *entry.Domain),
+			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Cname, *entry.CnameAnonymized, packetTimestamp, packetTimestamp+ttl, *entry.Domain),
 		}
 	}
 }
@@ -101,10 +205,10 @@ func MapTraceToFlowIpsTable(traceKey *TraceKey, trace *Trace, outputChan chan *t
 			continue
 		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.SourceIp, traceKey.SequenceNumber, timestamp, *entry.FlowId),
+			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.SourceIp, traceKey.SequenceNumber, *entry.DestinationIp, timestamp, *entry.FlowId),
 		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.DestinationIp, traceKey.SequenceNumber, timestamp, *entry.FlowId, *entry.SourceIp),
+			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.DestinationIp, traceKey.SequenceNumber, *entry.SourceIp, timestamp, *entry.FlowId),
 		}
 	}
 }
@@ -217,7 +321,7 @@ func EmitARecords(record *transformer.LevelDbRecord, outputChan chan *transforme
 		return
 	}
 	outputChan <- &transformer.LevelDbRecord{
-		Key: key.EncodeOrDie(session, domain, macAddress, ipAddress, startTimestamp, endTimestamp),
+		Key: key.EncodeOrDie(&session, domain, macAddress, ipAddress, startTimestamp, endTimestamp),
 	}
 }
 
@@ -255,7 +359,7 @@ func JoinARecordsWithCnameRecords(inputChan, outputChan chan *transformer.LevelD
 					continue
 				}
 				outputChan <- &transformer.LevelDbRecord{
-					Key: key.EncodeOrDie(session, cnameRecord.value, macAddress, aRecord.value, startTimestamp, endTimestamp),
+					Key: key.EncodeOrDie(&session, cnameRecord.value, macAddress, aRecord.value, startTimestamp, endTimestamp),
 				}
 			}
 		}
@@ -361,7 +465,7 @@ func JoinWhitelistedDomainsWithFlows(inputChan, outputChan chan *transformer.Lev
 					for _, entry := range domains {
 						if entry.start <= timestamp && entry.end >= timestamp {
 							outputChan <- &transformer.LevelDbRecord{
-								Key: key.EncodeOrDie(&session, flowId, sequenceNumber, int16(0), entry.domain, macAddress),
+								Key: key.EncodeOrDie(&session, flowId, sequenceNumber, entry.domain, macAddress),
 							}
 						}
 					}
@@ -374,9 +478,9 @@ func JoinWhitelistedDomainsWithFlows(inputChan, outputChan chan *transformer.Lev
 func GroupDomainsAndMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var (
 		session                SessionKey
-		sequenceNumber, flowId int32
+		flowId, sequenceNumber int32
 	)
-	grouper := transformer.GroupRecords(inputChan, &session, &sequenceNumber, &flowId)
+	grouper := transformer.GroupRecords(inputChan, &session, &flowId, &sequenceNumber)
 	for grouper.NextGroup() {
 		var domains, macAddresses [][]byte
 		for grouper.NextRecord() {
@@ -400,13 +504,13 @@ func JoinDomainsWithSizes(inputChan, outputChan chan *transformer.LevelDbRecord)
 	)
 	grouper := transformer.GroupRecords(inputChan, &session, &flowId)
 	for grouper.NextGroup() {
-		var domains, macAddresses []string
+		var domains, macAddresses [][]byte
 		for grouper.NextRecord() {
 			record := grouper.Read()
 
 			switch record.DatabaseIndex {
 			case 0:
-				key.DecodeOrDie(record.Value, domains, macAddresses)
+				key.DecodeOrDie(record.Value, &domains, &macAddresses)
 			case 1:
 				if domains != nil && macAddresses != nil {
 					var (
@@ -415,9 +519,8 @@ func JoinDomainsWithSizes(inputChan, outputChan chan *transformer.LevelDbRecord)
 					)
 					key.DecodeOrDie(record.Key, &sequenceNumber, &timestamp)
 					for idx, domain := range domains {
-						macAddress := macAddresses[idx]
 						outputChan <- &transformer.LevelDbRecord{
-							Key:   key.EncodeOrDie(&session, macAddress, domain, timestamp, flowId, sequenceNumber),
+							Key:   key.EncodeOrDie(session.NodeId, domain, timestamp, macAddresses[idx], session.AnonymizationContext, session.SessionId, flowId, sequenceNumber),
 							Value: record.Value,
 						}
 					}
@@ -429,12 +532,11 @@ func JoinDomainsWithSizes(inputChan, outputChan chan *transformer.LevelDbRecord)
 
 func FlattenIntoBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var (
-		session    SessionKey
-		domain     []byte
-		timestamp  int64
-		macAddress []byte
+		nodeId, domain []byte
+		timestamp      int64
+		macAddress     []byte
 	)
-	grouper := transformer.GroupRecords(inputChan, &session, &domain, &timestamp, &macAddress)
+	grouper := transformer.GroupRecords(inputChan, &nodeId, &domain, &timestamp, &macAddress)
 	for grouper.NextGroup() {
 		var totalSize int64
 		for grouper.NextRecord() {
@@ -444,7 +546,7 @@ func FlattenIntoBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRe
 			totalSize += size
 		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   grouper.CurrentGroupPrefix,
+			Key:   key.EncodeOrDie(nodeId, macAddress, domain, timestamp),
 			Value: key.EncodeOrDie(totalSize),
 		}
 	}
@@ -452,11 +554,10 @@ func FlattenIntoBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRe
 
 func FlattenIntoBytesPerTimestamp(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var (
-		session   SessionKey
-		domain    []byte
-		timestamp int64
+		nodeId, domain []byte
+		timestamp      int64
 	)
-	grouper := transformer.GroupRecords(inputChan, &session, &domain, &timestamp)
+	grouper := transformer.GroupRecords(inputChan, &nodeId, &domain, &timestamp)
 	for grouper.NextGroup() {
 		var totalSize int64
 		for grouper.NextRecord() {
@@ -466,7 +567,7 @@ func FlattenIntoBytesPerTimestamp(inputChan, outputChan chan *transformer.LevelD
 			totalSize += size
 		}
 		outputChan <- &transformer.LevelDbRecord{
-			Key:   key.EncodeOrDie(session, domain, timestamp),
+			Key:   key.EncodeOrDie(nodeId, domain, timestamp),
 			Value: key.EncodeOrDie(totalSize),
 		}
 	}
