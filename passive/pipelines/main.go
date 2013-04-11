@@ -52,6 +52,32 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			transformer.NewLevelDbStore(dbPath("bytesperdevice-trace-key-ranges")),
 			transformer.NewLevelDbStore(dbPath("bytesperdevice-consolidated-trace-key-ranges")),
 			workers)
+	case "bytesperdomain":
+		stores := passive.BytesPerDomainPipelineStores{
+			Traces:                     transformer.NewLevelDbStore(dbPath("traces")),
+			AvailabilityIntervals:      transformer.NewLevelDbStore(dbPath("consistent-ranges")),
+			TraceKeyRanges:             transformer.NewLevelDbStore(dbPath("bytesperdomain-trace-key-ranges")),
+			ConsolidatedTraceKeyRanges: transformer.NewLevelDbStore(dbPath("bytesperdomain-consolidated-trace-key-ranges")),
+			AddressIdTable:             transformer.NewLevelDbStore(dbPath("bytesperdomain-address-id-table")),
+			ARecordTable:               transformer.NewLevelDbStore(dbPath("bytesperdomain-a-record-table")),
+			CnameRecordTable:           transformer.NewLevelDbStore(dbPath("bytesperdomain-cname-record-table")),
+			FlowIpsTable:               transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-ips-table")),
+			AddressIpTable:             transformer.NewLevelDbStore(dbPath("bytesperdomain-address-ip-table")),
+			BytesPerTimestampSharded:   transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-timestamp-sharded")),
+			Whitelist:                  transformer.NewLevelDbStore(dbPath("bytesperdomain-whitelist")),
+			ARecordsWithMac:            transformer.NewLevelDbStore(dbPath("bytesperdomain-a-records-with-mac")),
+			CnameRecordsWithMac:        transformer.NewLevelDbStore(dbPath("bytesperdomain-cname-records-with-mac")),
+			AllDnsMappings:             transformer.NewLevelDbStore(dbPath("bytesperdomain-all-dns-mappings")),
+			AllWhitelistedMappings:     transformer.NewLevelDbStore(dbPath("bytesperdomain-all-whitelisted-mappings")),
+			FlowMacsTable:              transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-macs-table")),
+			FlowDomainsTable:           transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-domains-table")),
+			FlowDomainsGroupedTable:    transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-domains-grouped-table")),
+			BytesPerDomainSharded:      transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-sharded")),
+			BytesPerDomainPerDevice:    transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-per-device")),
+			BytesPerDomain:             transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain")),
+			Sessions:                   transformer.NewLevelDbStore(dbPath("bytesperdomain-sessions")),
+		}
+		return passive.BytesPerDomainPipeline(&stores, workers)
 	case "bytesperminute":
 		return passive.BytesPerMinutePipeline(
 			transformer.NewLevelDbStore(dbPath("traces")),
