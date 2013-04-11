@@ -2,6 +2,7 @@ package passive
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
 	"log"
@@ -223,4 +224,12 @@ func PrintRecords(inputChan, outputChan chan *transformer.LevelDbRecord) {
 		log.Printf("%s: %s (%v: %v)", record.Key, record.Value, record.Key, record.Value)
 	}
 	log.Printf("DONE PRINTING")
+}
+
+func PrintRecordsStage(name string, store transformer.StoreReader) transformer.PipelineStage {
+	return transformer.PipelineStage{
+		Name:        fmt.Sprintf("Print %v", name),
+		Reader:      store,
+		Transformer: transformer.TransformFunc(PrintRecords),
+	}
 }
