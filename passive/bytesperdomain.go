@@ -34,6 +34,9 @@ type BytesPerDomainPipelineStores struct {
 }
 
 func BytesPerDomainPipeline(stores *BytesPerDomainPipelineStores, workers int) []transformer.PipelineStage {
+	excludeOldSessions := func(store transformer.StoreSeeker) transformer.StoreSeeker {
+		return transformer.ReadIncludingPrefixes(store, stores.Sessions)
+	}
 	newTracesStore := transformer.ReadExcludingRanges(transformer.ReadIncludingRanges(stores.Traces, stores.AvailabilityIntervals), stores.TraceKeyRanges)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
@@ -45,55 +48,55 @@ func BytesPerDomainPipeline(stores *BytesPerDomainPipelineStores, workers int) [
 		SessionPipelineStage(newTracesStore, stores.Sessions),
 		transformer.PipelineStage{
 			Name:        "JoinAAddressIdsWithMacAddresses",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AddressIdTable, stores.ARecordTable), stores.Sessions),
+			Reader:      excludeOldSessions(transformer.NewDemuxStoreSeeker(stores.AddressIdTable, stores.ARecordTable)),
 			Transformer: transformer.TransformFunc(JoinAddressIdsWithMacAddresses),
 			Writer:      stores.ARecordsWithMac,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinCnameAddressIdsWithMacAddresses",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AddressIdTable, stores.CnameRecordTable), stores.Sessions),
+			Reader:      excludeOldSessions(transformer.NewDemuxStoreSeeker(stores.AddressIdTable, stores.CnameRecordTable)),
 			Transformer: transformer.TransformFunc(JoinAddressIdsWithMacAddresses),
 			Writer:      stores.CnameRecordsWithMac,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinARecordsWithCnameRecords",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.ARecordsWithMac, stores.CnameRecordsWithMac), stores.Sessions),
+			Reader:      excludeOldSessions(transformer.NewDemuxStoreSeeker(stores.ARecordsWithMac, stores.CnameRecordsWithMac)),
 			Transformer: transformer.TransformFunc(JoinARecordsWithCnameRecords),
 			Writer:      stores.AllDnsMappings,
 		},
 		transformer.PipelineStage{
 			Name:        "EmitARecords",
-			Reader:      transformer.ReadIncludingPrefixes(stores.ARecordsWithMac, stores.Sessions),
+			Reader:      excludeOldSessions(stores.ARecordsWithMac),
 			Transformer: transformer.MakeDoFunc(EmitARecords, workers),
 			Writer:      stores.AllDnsMappings,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinDomainsWithWhitelist",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.Whitelist, stores.AllDnsMappings), stores.Sessions),
+			Reader:      excludeOldSessions(transformer.NewDemuxStoreSeeker(stores.Whitelist, stores.AllDnsMappings)),
 			Transformer: transformer.TransformFunc(JoinDomainsWithWhitelist),
 			Writer:      stores.AllWhitelistedMappings,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinMacWithFlowId",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AddressIpTable, stores.FlowIpsTable), stores.Sessions),
+			Reader:      excludeOldSessions(transformer.NewDemuxStoreSeeker(stores.AddressIpTable, stores.FlowIpsTable)),
 			Transformer: transformer.TransformFunc(JoinMacWithFlowId),
 			Writer:      stores.FlowMacsTable,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinWhitelistedDomainsWithFlows",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.AllWhitelistedMappings, stores.FlowMacsTable), stores.Sessions),
+			Reader:      excludeOldSessions(transformer.NewDemuxStoreSeeker(stores.AllWhitelistedMappings, stores.FlowMacsTable)),
 			Transformer: transformer.TransformFunc(JoinWhitelistedDomainsWithFlows),
 			Writer:      stores.FlowDomainsTable,
 		},
 		transformer.PipelineStage{
 			Name:        "GroupDomainsAndMacAddresses",
-			Reader:      transformer.ReadIncludingPrefixes(stores.FlowDomainsTable, stores.Sessions),
+			Reader:      excludeOldSessions(stores.FlowDomainsTable),
 			Transformer: transformer.TransformFunc(GroupDomainsAndMacAddresses),
 			Writer:      stores.FlowDomainsGroupedTable,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinDomainsWithSizes",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(stores.FlowDomainsGroupedTable, stores.BytesPerTimestampSharded), stores.Sessions),
+			Reader:      excludeOldSessions(transformer.NewDemuxStoreSeeker(stores.FlowDomainsGroupedTable, stores.BytesPerTimestampSharded)),
 			Transformer: transformer.TransformFunc(JoinDomainsWithSizes),
 			Writer:      stores.BytesPerDomainSharded,
 		},
