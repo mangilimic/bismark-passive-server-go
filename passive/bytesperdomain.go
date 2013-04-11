@@ -1,13 +1,13 @@
 package passive
 
 import (
-	"bytes"
 	"code.google.com/p/goprotobuf/proto"
 	"fmt"
 	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
 	"math"
+	"sort"
 )
 
 type BytesPerDomainPipelineStores struct {
@@ -370,28 +370,33 @@ func JoinARecordsWithCnameRecords(inputChan, outputChan chan *transformer.LevelD
 }
 
 func JoinDomainsWithWhitelist(inputChan, outputChan chan *transformer.LevelDbRecord) {
-	dotPrefix := []byte(".")
 	var session SessionKey
 	grouper := transformer.GroupRecords(inputChan, &session)
 	for grouper.NextGroup() {
-		var whitelist [][]byte
+		var whitelist []string
 		for grouper.NextRecord() {
 			record := grouper.Read()
 
 			switch record.DatabaseIndex {
 			case 0:
 				key.DecodeOrDie(record.Value, &whitelist)
+				sort.Sort(sort.StringSlice(whitelist))
 			case 1:
-				if whitelist != nil {
-					var domain []byte
-					remainder := key.DecodeOrDie(record.Key, &domain)
-					for _, whitelistDomain := range whitelist {
-						if !bytes.Equal(domain, whitelistDomain) && !bytes.HasSuffix(domain, append(dotPrefix, whitelistDomain...)) {
-							continue
-						}
-						outputChan <- &transformer.LevelDbRecord{
-							Key: key.Join(grouper.CurrentGroupPrefix, remainder, key.EncodeOrDie(whitelistDomain)),
-						}
+				if whitelist == nil {
+					continue
+				}
+				var domain string
+				remainder := key.DecodeOrDie(record.Key, &domain)
+				for i := 0; i < len(domain); i++ {
+					if i > 0 && domain[i-1] != '.' {
+						continue
+					}
+					idx := sort.SearchStrings(whitelist, domain[i:])
+					if idx >= len(whitelist) || whitelist[idx] != domain[i:] {
+						continue
+					}
+					outputChan <- &transformer.LevelDbRecord{
+						Key: key.Join(grouper.CurrentGroupPrefix, remainder, key.EncodeOrDie(whitelist[idx])),
 					}
 				}
 			}
