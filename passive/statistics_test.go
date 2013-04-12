@@ -8,9 +8,8 @@ import (
 	"github.com/sburnett/transformer/key"
 )
 
-func makeTraceWithStatistics(nodeId string, packetSizes []int, packetsDropped, pcapDropped, interfaceDropped, numFlows, flowsDropped int) *Trace {
-	trace := &Trace{
-		NodeId:              &nodeId,
+func makeTraceWithStatistics(packetSizes []int, packetsDropped, pcapDropped, interfaceDropped, numFlows, flowsDropped int) Trace {
+	trace := Trace{
 		PacketSeries:        make([]*PacketSeriesEntry, len(packetSizes)),
 		PacketSeriesDropped: proto.Uint32(uint32(packetsDropped)),
 		PcapDropped:         proto.Uint32(uint32(pcapDropped)),
@@ -29,71 +28,119 @@ func makeTraceWithStatistics(nodeId string, packetSizes []int, packetsDropped, p
 	return trace
 }
 
-func runAggregateStatisticsPipeline(allTraces ...[]*Trace) {
+func runAggregateStatisticsPipeline(consistentRanges []*transformer.LevelDbRecord, allTraces ...map[string]Trace) {
 	tracesStore := transformer.SliceStore{}
+	availabilityIntervalsStore := transformer.SliceStore{}
+	availabilityIntervalsStore.BeginWriting()
+	for _, record := range consistentRanges {
+		availabilityIntervalsStore.WriteRecord(record)
+	}
+	availabilityIntervalsStore.EndWriting()
 	traceAggregatesStore := transformer.SliceStore{}
+	sessionAggregatesStore := transformer.SliceStore{}
 	nodeAggregatesStore := transformer.SliceStore{}
 	var writer *bytes.Buffer
+	sessionsStore := transformer.SliceStore{}
 	traceKeyRangesStore := transformer.SliceStore{}
 	consolidatedTraceKeyRangesStore := transformer.SliceStore{}
-	sequenceNumber := int32(0)
 	for _, traces := range allTraces {
 		tracesStore.BeginWriting()
-		for _, trace := range traces {
-			traceKey := TraceKey{
-				NodeId:               []byte(*trace.NodeId),
-				AnonymizationContext: []byte("context"),
-				SessionId:            0,
-				SequenceNumber:       sequenceNumber,
-			}
-			encodedKey := key.EncodeOrDie(&traceKey)
-			encodedTrace, err := proto.Marshal(trace)
+		for encodedKey, trace := range traces {
+			encodedTrace, err := proto.Marshal(&trace)
 			if err != nil {
 				panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 			}
-			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: encodedKey, Value: encodedTrace})
-			sequenceNumber++
+			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
 		}
 		tracesStore.EndWriting()
 
 		writer = bytes.NewBuffer([]byte{})
 
-		transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &traceAggregatesStore, &nodeAggregatesStore, writer, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+		transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &availabilityIntervalsStore, &traceAggregatesStore, &sessionAggregatesStore, &nodeAggregatesStore, writer, &sessionsStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
 	}
 	fmt.Printf("%s", writer.Bytes())
 }
 
 func ExampleAggregateStatisticsPipeline() {
-	runAggregateStatisticsPipeline([]*Trace{
-		makeTraceWithStatistics("node", []int{2, 2, 2}, 1, 0, 0, 2, 3),
-		makeTraceWithStatistics("node", []int{1, 2}, 0, 1, 0, 3, 4),
-		makeTraceWithStatistics("node", []int{1, 2}, 0, 0, 1, 4, 5),
-	})
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(2))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 1, 4, 5),
+	}
+	runAggregateStatisticsPipeline(consistentRanges, records)
 
 	// Output:
-	// [["node",3,7,3,9,12,12]]
+	// [["node0",3,7,3,9,12,12]]
 }
 
 func ExampleAggregateStatisticsPipeline_multipleNodes() {
-	runAggregateStatisticsPipeline([]*Trace{
-		makeTraceWithStatistics("node1", []int{2, 2, 2}, 1, 0, 0, 2, 3),
-		makeTraceWithStatistics("node1", []int{1, 2}, 0, 1, 0, 3, 4),
-		makeTraceWithStatistics("node2", []int{1, 2}, 0, 0, 1, 4, 5),
-		makeTraceWithStatistics("node2", []int{1, 2}, 0, 0, 1, 4, 5),
-	})
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+		},
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node1", "anon0", int64(0), int32(1)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+		string(key.EncodeOrDie("node1", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+		string(key.EncodeOrDie("node1", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+	}
+	runAggregateStatisticsPipeline(consistentRanges, records)
 
 	// Output:
-	// [["node1",2,5,2,5,7,9],["node2",2,4,2,8,10,6]]
+	// [["node0",2,5,2,5,7,9],["node1",2,4,1,8,10,6]]
+}
+
+func ExampleAggregateStatisticsPipeline_multipleSessions() {
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+		},
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(1), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(1), int32(1)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+		string(key.EncodeOrDie("node0", "anon0", int64(1), int32(0))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+		string(key.EncodeOrDie("node0", "anon0", int64(1), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+	}
+	runAggregateStatisticsPipeline(consistentRanges, records)
+
+	// Output:
+	// [["node0",4,9,3,13,17,15]]
 }
 
 func ExampleAggregateStatisticsPipeline_multipleRuns() {
-	runAggregateStatisticsPipeline([]*Trace{
-		makeTraceWithStatistics("node", []int{2, 2, 2}, 1, 0, 0, 2, 3),
-		makeTraceWithStatistics("node", []int{1, 2}, 0, 1, 0, 3, 4),
-	}, []*Trace{
-		makeTraceWithStatistics("node", []int{1, 2}, 0, 0, 1, 4, 5),
-	})
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+	}
+	moreRecords := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(2))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 1, 4, 5),
+	}
+	runAggregateStatisticsPipeline(consistentRanges, records, moreRecords)
 
 	// Output:
-	// [["node",3,7,3,9,12,12]]
+	// [["node0",3,7,3,9,12,12]]
 }

@@ -3,8 +3,10 @@ package passive;
 message AggregateStatistics {
     optional int64 traces = 1;
     optional int64 packets = 2;
-    optional int64 dropped_packets = 3;
-    optional int64 flows = 4;
-    optional int64 dropped_flows = 5;
-    optional int64 bytes = 6;
+    optional int64 packet_series_dropped = 3;
+    optional int64 pcap_dropped = 4;
+    optional int64 interface_dropped = 5;
+    optional int64 flows = 6;
+    optional int64 dropped_flows = 7;
+    optional int64 bytes = 8;
 }

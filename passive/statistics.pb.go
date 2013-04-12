@@ -14,13 +14,15 @@ var _ = &json.SyntaxError{}
 var _ = math.Inf
 
 type AggregateStatistics struct {
-	Traces           *int64 `protobuf:"varint,1,opt,name=traces" json:"traces,omitempty"`
-	Packets          *int64 `protobuf:"varint,2,opt,name=packets" json:"packets,omitempty"`
-	DroppedPackets   *int64 `protobuf:"varint,3,opt,name=dropped_packets" json:"dropped_packets,omitempty"`
-	Flows            *int64 `protobuf:"varint,4,opt,name=flows" json:"flows,omitempty"`
-	DroppedFlows     *int64 `protobuf:"varint,5,opt,name=dropped_flows" json:"dropped_flows,omitempty"`
-	Bytes            *int64 `protobuf:"varint,6,opt,name=bytes" json:"bytes,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Traces              *int64 `protobuf:"varint,1,opt,name=traces" json:"traces,omitempty"`
+	Packets             *int64 `protobuf:"varint,2,opt,name=packets" json:"packets,omitempty"`
+	PacketSeriesDropped *int64 `protobuf:"varint,3,opt,name=packet_series_dropped" json:"packet_series_dropped,omitempty"`
+	PcapDropped         *int64 `protobuf:"varint,4,opt,name=pcap_dropped" json:"pcap_dropped,omitempty"`
+	InterfaceDropped    *int64 `protobuf:"varint,5,opt,name=interface_dropped" json:"interface_dropped,omitempty"`
+	Flows               *int64 `protobuf:"varint,6,opt,name=flows" json:"flows,omitempty"`
+	DroppedFlows        *int64 `protobuf:"varint,7,opt,name=dropped_flows" json:"dropped_flows,omitempty"`
+	Bytes               *int64 `protobuf:"varint,8,opt,name=bytes" json:"bytes,omitempty"`
+	XXX_unrecognized    []byte `json:"-"`
 }
 
 func (this *AggregateStatistics) Reset()         { *this = AggregateStatistics{} }
@@ -41,9 +43,23 @@ func (this *AggregateStatistics) GetPackets() int64 {
 	return 0
 }
 
-func (this *AggregateStatistics) GetDroppedPackets() int64 {
-	if this != nil && this.DroppedPackets != nil {
-		return *this.DroppedPackets
+func (this *AggregateStatistics) GetPacketSeriesDropped() int64 {
+	if this != nil && this.PacketSeriesDropped != nil {
+		return *this.PacketSeriesDropped
+	}
+	return 0
+}
+
+func (this *AggregateStatistics) GetPcapDropped() int64 {
+	if this != nil && this.PcapDropped != nil {
+		return *this.PcapDropped
+	}
+	return 0
+}
+
+func (this *AggregateStatistics) GetInterfaceDropped() int64 {
+	if this != nil && this.InterfaceDropped != nil {
+		return *this.InterfaceDropped
 	}
 	return 0
 }
