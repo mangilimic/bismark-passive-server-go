@@ -337,6 +337,27 @@ func EmitARecords(record *transformer.LevelDbRecord, outputChan chan *transforme
 	}
 }
 
+type dnsRecord struct {
+	timestamp  int64
+	aRecord    bool
+	startEvent bool
+	value      string
+}
+
+type DnsRecords []*dnsRecord
+
+func (records DnsRecords) Len() int { return len(records) }
+func (records DnsRecords) Less(i, j int) bool {
+	if records[i].timestamp < records[j].timestamp {
+		return true
+	}
+	if records[i].timestamp == records[j].timestamp && records[i].startEvent && !records[j].startEvent {
+		return true
+	}
+	return false
+}
+func (records DnsRecords) Swap(i, j int) { records[i], records[j] = records[j], records[i] }
+
 func JoinARecordsWithCnameRecords(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	var (
 		session            SessionKey
@@ -345,33 +366,65 @@ func JoinARecordsWithCnameRecords(inputChan, outputChan chan *transformer.LevelD
 	)
 	grouper := transformer.GroupRecords(inputChan, &session, &macAddress, &domain, &anonymized)
 	for grouper.NextGroup() {
-		type dnsRecord struct {
-			startTimestamp, endTimestamp int64
-			value                        []byte
-		}
-		var aRecords, cnameRecords []dnsRecord
+		var allRecords DnsRecords
 		for grouper.NextRecord() {
 			record := grouper.Read()
-			var newDnsRecord dnsRecord
-			key.DecodeOrDie(record.Key, &newDnsRecord.startTimestamp, &newDnsRecord.endTimestamp, &newDnsRecord.value)
-			switch record.DatabaseIndex {
-			case 0:
-				aRecords = append(aRecords, newDnsRecord)
-			case 1:
-				cnameRecords = append(cnameRecords, newDnsRecord)
-			default:
-				panic(fmt.Errorf("Invalid DatabaseIndex: %d", record.DatabaseIndex))
-			}
+			newStartDnsRecord := dnsRecord{startEvent: true, aRecord: record.DatabaseIndex == 0}
+			newEndDnsRecord := dnsRecord{startEvent: false, aRecord: record.DatabaseIndex == 0}
+			key.DecodeOrDie(record.Key, &newStartDnsRecord.timestamp, &newEndDnsRecord.timestamp, &newStartDnsRecord.value)
+			newEndDnsRecord.value = newStartDnsRecord.value
+			allRecords = append(allRecords, &newStartDnsRecord)
+			allRecords = append(allRecords, &newEndDnsRecord)
 		}
-		for _, aRecord := range aRecords {
-			for _, cnameRecord := range cnameRecords {
-				startTimestamp := maxInt64(aRecord.startTimestamp, cnameRecord.startTimestamp)
-				endTimestamp := minInt64(aRecord.endTimestamp, cnameRecord.endTimestamp)
-				if startTimestamp >= endTimestamp {
-					continue
+		sort.Sort(allRecords)
+
+		currentAValues := make(map[string]int64)
+		currentCnameValues := make(map[string]int64)
+		currentACounts := make(map[string]int)
+		currentCnameCounts := make(map[string]int)
+		for _, record := range allRecords {
+			switch record.aRecord {
+			case true:
+				switch record.startEvent {
+				case true:
+					timestamp := record.timestamp
+					if oldTimestamp, ok := currentAValues[record.value]; ok {
+						timestamp = minInt64(timestamp, oldTimestamp)
+					}
+					currentAValues[record.value] = timestamp
+					currentACounts[record.value]++
+				case false:
+					currentACounts[record.value]--
+					if currentACounts[record.value] == 0 {
+						startTimestamp := currentAValues[record.value]
+						delete(currentAValues, record.value)
+						for domain, timestamp := range currentCnameValues {
+							outputChan <- &transformer.LevelDbRecord{
+								Key: key.EncodeOrDie(&session, domain, macAddress, record.value, maxInt64(startTimestamp, timestamp), record.timestamp),
+							}
+						}
+					}
 				}
-				outputChan <- &transformer.LevelDbRecord{
-					Key: key.EncodeOrDie(&session, cnameRecord.value, macAddress, aRecord.value, startTimestamp, endTimestamp),
+			case false:
+				switch record.startEvent {
+				case true:
+					timestamp := record.timestamp
+					if oldTimestamp, ok := currentCnameValues[record.value]; ok {
+						timestamp = minInt64(timestamp, oldTimestamp)
+					}
+					currentCnameValues[record.value] = timestamp
+					currentCnameCounts[record.value]++
+				case false:
+					currentCnameCounts[record.value]--
+					if currentCnameCounts[record.value] == 0 {
+						startTimestamp := currentCnameValues[record.value]
+						delete(currentCnameValues, record.value)
+						for ip, timestamp := range currentAValues {
+							outputChan <- &transformer.LevelDbRecord{
+								Key: key.EncodeOrDie(&session, record.value, macAddress, ip, maxInt64(startTimestamp, timestamp), record.timestamp),
+							}
+						}
+					}
 				}
 			}
 		}
