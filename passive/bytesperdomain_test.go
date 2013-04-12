@@ -582,7 +582,7 @@ func ExampleBytesPerDomain_singleCnameAnonymizedDomain() {
 	// node0,mac1,domain1,0: 100
 }
 
-func ExampleBytesPerDomain_singleCnameLeaseIntersection() {
+func ExampleBytesPerDomain_singleCnameLeaseIntersectionAFirst() {
 	trace := Trace{
 		AddressTableFirstId: proto.Int32(0),
 		AddressTableSize:    proto.Int32(255),
@@ -646,7 +646,7 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersection() {
 				FlowId:                proto.Int32(0),
 			},
 			&PacketSeriesEntry{
-				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(20)),
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
 				Size:                  proto.Int32(50),
 				FlowId:                proto.Int32(1),
 			},
@@ -682,6 +682,563 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersection() {
 	// BytesPerDomainPerDevice:
 	// node0,mac1,domain1,0: 175
 	// node0,mac1,domain2,0: 75
+}
+
+func ExampleBytesPerDomain_singleCnameLeaseIntersectionALonger() {
+	trace := Trace{
+		AddressTableFirstId: proto.Int32(0),
+		AddressTableSize:    proto.Int32(255),
+		AddressTableEntry: []*AddressTableEntry{
+			&AddressTableEntry{
+				MacAddress: proto.String("mac1"),
+				IpAddress:  proto.String("local1"),
+			},
+		},
+		ARecord: []*DnsARecord{
+			&DnsARecord{
+				AddressId:  proto.Int32(0),
+				Domain:     proto.String("domain1"),
+				Anonymized: proto.Bool(false),
+				PacketId:   proto.Int32(0),
+				Ttl:        proto.Int32(120),
+				IpAddress:  proto.String("remote1"),
+			},
+		},
+		CnameRecord: []*DnsCnameRecord{
+			&DnsCnameRecord{
+				AddressId:        proto.Int32(0),
+				Domain:           proto.String("domain2"),
+				DomainAnonymized: proto.Bool(false),
+				Cname:            proto.String("domain1"),
+				CnameAnonymized:  proto.Bool(false),
+				PacketId:         proto.Int32(1),
+				Ttl:              proto.Int32(60),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId:        proto.Int32(0),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(1),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(2),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(3),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+		},
+		Whitelist: []string{
+			"domain1",
+			"domain2",
+		},
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size:                  proto.Int32(100),
+				FlowId:                proto.Int32(0),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
+				Size:                  proto.Int32(50),
+				FlowId:                proto.Int32(1),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60)),
+				Size:                  proto.Int32(25),
+				FlowId:                proto.Int32(2),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(3),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(120)),
+				Size:                  proto.Int32(5),
+				FlowId:                proto.Int32(4),
+			},
+		},
+	}
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+	}
+
+	runBytesPerDomainPipeline(consistentRanges, records)
+
+	// Output:
+	// BytesPerDomain:
+	// node0,domain1,0: 190
+	// node0,domain2,0: 85
+	//
+	// BytesPerDomainPerDevice:
+	// node0,mac1,domain1,0: 190
+	// node0,mac1,domain2,0: 85
+}
+
+func ExampleBytesPerDomain_singleCnameLeaseIntersectionAOverlap() {
+	trace := Trace{
+		AddressTableFirstId: proto.Int32(0),
+		AddressTableSize:    proto.Int32(255),
+		AddressTableEntry: []*AddressTableEntry{
+			&AddressTableEntry{
+				MacAddress: proto.String("mac1"),
+				IpAddress:  proto.String("local1"),
+			},
+		},
+		ARecord: []*DnsARecord{
+			&DnsARecord{
+				AddressId:  proto.Int32(0),
+				Domain:     proto.String("domain1"),
+				Anonymized: proto.Bool(false),
+				PacketId:   proto.Int32(0),
+				Ttl:        proto.Int32(60),
+				IpAddress:  proto.String("remote1"),
+			},
+			&DnsARecord{
+				AddressId:  proto.Int32(0),
+				Domain:     proto.String("domain1"),
+				Anonymized: proto.Bool(false),
+				PacketId:   proto.Int32(1),
+				Ttl:        proto.Int32(60),
+				IpAddress:  proto.String("remote1"),
+			},
+		},
+		CnameRecord: []*DnsCnameRecord{
+			&DnsCnameRecord{
+				AddressId:        proto.Int32(0),
+				Domain:           proto.String("domain2"),
+				DomainAnonymized: proto.Bool(false),
+				Cname:            proto.String("domain1"),
+				CnameAnonymized:  proto.Bool(false),
+				PacketId:         proto.Int32(1),
+				Ttl:              proto.Int32(60),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId:        proto.Int32(0),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(1),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(2),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(3),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+		},
+		Whitelist: []string{
+			"domain1",
+			"domain2",
+		},
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size:                  proto.Int32(100),
+				FlowId:                proto.Int32(0),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
+				Size:                  proto.Int32(50),
+				FlowId:                proto.Int32(1),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(45)),
+				Size:                  proto.Int32(25),
+				FlowId:                proto.Int32(2),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(3),
+			},
+		},
+	}
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+	}
+
+	runBytesPerDomainPipeline(consistentRanges, records)
+
+	// Output:
+	// BytesPerDomain:
+	// node0,domain1,0: 185
+	// node0,domain2,0: 85
+	//
+	// BytesPerDomainPerDevice:
+	// node0,mac1,domain1,0: 185
+	// node0,mac1,domain2,0: 85
+}
+
+func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameFirst() {
+	trace := Trace{
+		AddressTableFirstId: proto.Int32(0),
+		AddressTableSize:    proto.Int32(255),
+		AddressTableEntry: []*AddressTableEntry{
+			&AddressTableEntry{
+				MacAddress: proto.String("mac1"),
+				IpAddress:  proto.String("local1"),
+			},
+		},
+		ARecord: []*DnsARecord{
+			&DnsARecord{
+				AddressId:  proto.Int32(0),
+				Domain:     proto.String("domain1"),
+				Anonymized: proto.Bool(false),
+				PacketId:   proto.Int32(1),
+				Ttl:        proto.Int32(60),
+				IpAddress:  proto.String("remote1"),
+			},
+		},
+		CnameRecord: []*DnsCnameRecord{
+			&DnsCnameRecord{
+				AddressId:        proto.Int32(0),
+				Domain:           proto.String("domain2"),
+				DomainAnonymized: proto.Bool(false),
+				Cname:            proto.String("domain1"),
+				CnameAnonymized:  proto.Bool(false),
+				PacketId:         proto.Int32(0),
+				Ttl:              proto.Int32(60),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId:        proto.Int32(0),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(1),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(2),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(3),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+		},
+		Whitelist: []string{
+			"domain1",
+			"domain2",
+		},
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size:                  proto.Int32(100),
+				FlowId:                proto.Int32(0),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
+				Size:                  proto.Int32(50),
+				FlowId:                proto.Int32(1),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60)),
+				Size:                  proto.Int32(25),
+				FlowId:                proto.Int32(2),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(3),
+			},
+		},
+	}
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+	}
+
+	runBytesPerDomainPipeline(consistentRanges, records)
+
+	// Output:
+	// BytesPerDomain:
+	// node0,domain1,0: 85
+	// node0,domain2,0: 75
+	//
+	// BytesPerDomainPerDevice:
+	// node0,mac1,domain1,0: 85
+	// node0,mac1,domain2,0: 75
+}
+
+func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameLonger() {
+	trace := Trace{
+		AddressTableFirstId: proto.Int32(0),
+		AddressTableSize:    proto.Int32(255),
+		AddressTableEntry: []*AddressTableEntry{
+			&AddressTableEntry{
+				MacAddress: proto.String("mac1"),
+				IpAddress:  proto.String("local1"),
+			},
+		},
+		ARecord: []*DnsARecord{
+			&DnsARecord{
+				AddressId:  proto.Int32(0),
+				Domain:     proto.String("domain1"),
+				Anonymized: proto.Bool(false),
+				PacketId:   proto.Int32(1),
+				Ttl:        proto.Int32(60),
+				IpAddress:  proto.String("remote1"),
+			},
+		},
+		CnameRecord: []*DnsCnameRecord{
+			&DnsCnameRecord{
+				AddressId:        proto.Int32(0),
+				Domain:           proto.String("domain2"),
+				DomainAnonymized: proto.Bool(false),
+				Cname:            proto.String("domain1"),
+				CnameAnonymized:  proto.Bool(false),
+				PacketId:         proto.Int32(0),
+				Ttl:              proto.Int32(120),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId:        proto.Int32(0),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(1),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(2),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(3),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+		},
+		Whitelist: []string{
+			"domain1",
+			"domain2",
+		},
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size:                  proto.Int32(100),
+				FlowId:                proto.Int32(0),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
+				Size:                  proto.Int32(50),
+				FlowId:                proto.Int32(1),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60)),
+				Size:                  proto.Int32(25),
+				FlowId:                proto.Int32(2),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(3),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(120)),
+				Size:                  proto.Int32(5),
+				FlowId:                proto.Int32(4),
+			},
+		},
+	}
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+	}
+
+	runBytesPerDomainPipeline(consistentRanges, records)
+
+	// Output:
+	// BytesPerDomain:
+	// node0,domain1,0: 85
+	// node0,domain2,0: 85
+	//
+	// BytesPerDomainPerDevice:
+	// node0,mac1,domain1,0: 85
+	// node0,mac1,domain2,0: 85
+}
+
+func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameOverlap() {
+	trace := Trace{
+		AddressTableFirstId: proto.Int32(0),
+		AddressTableSize:    proto.Int32(255),
+		AddressTableEntry: []*AddressTableEntry{
+			&AddressTableEntry{
+				MacAddress: proto.String("mac1"),
+				IpAddress:  proto.String("local1"),
+			},
+		},
+		ARecord: []*DnsARecord{
+			&DnsARecord{
+				AddressId:  proto.Int32(0),
+				Domain:     proto.String("domain1"),
+				Anonymized: proto.Bool(false),
+				PacketId:   proto.Int32(1),
+				Ttl:        proto.Int32(60),
+				IpAddress:  proto.String("remote1"),
+			},
+		},
+		CnameRecord: []*DnsCnameRecord{
+			&DnsCnameRecord{
+				AddressId:        proto.Int32(0),
+				Domain:           proto.String("domain2"),
+				DomainAnonymized: proto.Bool(false),
+				Cname:            proto.String("domain1"),
+				CnameAnonymized:  proto.Bool(false),
+				PacketId:         proto.Int32(0),
+				Ttl:              proto.Int32(60),
+			},
+			&DnsCnameRecord{
+				AddressId:        proto.Int32(0),
+				Domain:           proto.String("domain2"),
+				DomainAnonymized: proto.Bool(false),
+				Cname:            proto.String("domain1"),
+				CnameAnonymized:  proto.Bool(false),
+				PacketId:         proto.Int32(1),
+				Ttl:              proto.Int32(60),
+			},
+		},
+		FlowTableEntry: []*FlowTableEntry{
+			&FlowTableEntry{
+				FlowId:        proto.Int32(0),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(1),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(2),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(3),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+			&FlowTableEntry{
+				FlowId:        proto.Int32(4),
+				SourceIp:      proto.String("local1"),
+				DestinationIp: proto.String("remote1"),
+			},
+		},
+		Whitelist: []string{
+			"domain1",
+			"domain2",
+		},
+		PacketSeries: []*PacketSeriesEntry{
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(0),
+				Size:                  proto.Int32(100),
+				FlowId:                proto.Int32(0),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
+				Size:                  proto.Int32(50),
+				FlowId:                proto.Int32(1),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(50)),
+				Size:                  proto.Int32(25),
+				FlowId:                proto.Int32(2),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
+				Size:                  proto.Int32(10),
+				FlowId:                proto.Int32(3),
+			},
+			&PacketSeriesEntry{
+				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(120)),
+				Size:                  proto.Int32(5),
+				FlowId:                proto.Int32(4),
+			},
+		},
+	}
+	consistentRanges := []*transformer.LevelDbRecord{
+		&transformer.LevelDbRecord{
+			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+		},
+	}
+	records := map[string]Trace{
+		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+	}
+
+	runBytesPerDomainPipeline(consistentRanges, records)
+
+	// Output:
+	// BytesPerDomain:
+	// node0,domain1,0: 85
+	// node0,domain2,0: 85
+	//
+	// BytesPerDomainPerDevice:
+	// node0,mac1,domain1,0: 85
+	// node0,mac1,domain2,0: 85
 }
 
 func ExampleBytesPerDomain_multiplePackets() {
