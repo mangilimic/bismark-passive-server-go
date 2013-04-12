@@ -75,6 +75,7 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			BytesPerDomainSharded:      transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-sharded")),
 			BytesPerDomainPerDevice:    transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-per-device")),
 			BytesPerDomain:             transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain")),
+			BytesPerDomainPostgres:     passive.NewBytesPerDomainPostgresStore(),
 			Sessions:                   transformer.NewLevelDbStore(dbPath("bytesperdomain-sessions")),
 		}
 		return passive.BytesPerDomainPipeline(&stores, workers)

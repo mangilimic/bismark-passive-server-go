@@ -2,12 +2,14 @@ package passive
 
 import (
 	"code.google.com/p/goprotobuf/proto"
+	"database/sql"
 	"fmt"
 	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
 	"math"
 	"sort"
+	"time"
 )
 
 type BytesPerDomainPipelineStores struct {
@@ -29,6 +31,8 @@ type BytesPerDomainPipelineStores struct {
 
 	BytesPerDomainSharded                   transformer.Datastore
 	BytesPerDomainPerDevice, BytesPerDomain transformer.Datastore
+
+	BytesPerDomainPostgres transformer.StoreWriter
 
 	Sessions transformer.DatastoreFull
 }
@@ -111,6 +115,11 @@ func BytesPerDomainPipeline(stores *BytesPerDomainPipelineStores, workers int) [
 			Reader:      stores.BytesPerDomainSharded,
 			Transformer: transformer.TransformFunc(FlattenIntoBytesPerTimestamp),
 			Writer:      stores.BytesPerDomain,
+		},
+		transformer.PipelineStage{
+			Name:   "BytesPerDomainPostgresStore",
+			Reader: stores.BytesPerDomain,
+			Writer: stores.BytesPerDomainPostgres,
 		},
 	}, TraceKeyRangesPipeline(newTracesStore, stores.TraceKeyRanges, stores.ConsolidatedTraceKeyRanges)...)
 }
@@ -571,4 +580,72 @@ func FlattenIntoBytesPerTimestamp(inputChan, outputChan chan *transformer.LevelD
 			Value: key.EncodeOrDie(totalSize),
 		}
 	}
+}
+
+type BytesPerDomainPostgresStore struct {
+	conn        *sql.DB
+	transaction *sql.Tx
+	statement   *sql.Stmt
+}
+
+func NewBytesPerDomainPostgresStore() *BytesPerDomainPostgresStore {
+	return &BytesPerDomainPostgresStore{}
+}
+
+func (store *BytesPerDomainPostgresStore) BeginWriting() error {
+	conn, err := sql.Open("postgres", "")
+	if err != nil {
+		return err
+	}
+	transaction, err := conn.Begin()
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	if _, err := transaction.Exec("SET search_path TO bismark_passive"); err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	if _, err := transaction.Exec("DELETE FROM bytes_per_domain_per_hour"); err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	statement, err := transaction.Prepare("INSERT INTO bytes_per_domain_per_hour (node_id, domain, timestamp, bytes) VALUES ($1, $2, $3, $4)")
+	if err != nil {
+		transaction.Rollback()
+		conn.Close()
+		return err
+	}
+	store.conn = conn
+	store.transaction = transaction
+	store.statement = statement
+	return nil
+}
+
+func (store *BytesPerDomainPostgresStore) WriteRecord(record *transformer.LevelDbRecord) error {
+	var nodeId, domain []byte
+	var timestamp, size int64
+
+	key.DecodeOrDie(record.Key, &nodeId, &domain, &timestamp)
+	key.DecodeOrDie(record.Value, &size)
+
+	if _, err := store.statement.Exec(nodeId, domain, time.Unix(timestamp, 0), size); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (store *BytesPerDomainPostgresStore) EndWriting() error {
+	if err := store.statement.Close(); err != nil {
+		return err
+	}
+	if err := store.transaction.Commit(); err != nil {
+		return err
+	}
+	if err := store.conn.Close(); err != nil {
+		return err
+	}
+	return nil
 }
