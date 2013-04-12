@@ -134,6 +134,17 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 				Writer:      transformer.NewMuxedStoreWriter(tracesStore, tarnamesIndexedStore),
 			},
 		}
+	case "print":
+		flagset := flag.NewFlagSet("print", flag.ExitOnError)
+		storePath := flagset.String("leveldb", "", "Print the contents of this LevelDB")
+		keyFormat := flagset.String("key_format", "", "Format keys using this format string")
+		valueFormat := flagset.String("value_format", "", "Format values using this format string")
+		flagset.Parse(flag.Args()[2:])
+		if len(*storePath) == 0 {
+			panic(fmt.Errorf("Invalid leveldb name. Must specify --leveldb."))
+		}
+		store := transformer.NewLevelDbStore(dbPath(*storePath))
+		return passive.RecordPrinterPipeline(store, *keyFormat, *valueFormat)
 	case "statistics":
 		flagset := flag.NewFlagSet("statistics", flag.ExitOnError)
 		jsonOutput := flagset.String("json_output", "/dev/null", "Write statistics in JSON format to this file.")
