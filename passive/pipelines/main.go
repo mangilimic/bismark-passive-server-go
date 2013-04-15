@@ -155,9 +155,12 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		}
 		return passive.AggregateStatisticsPipeline(
 			transformer.NewLevelDbStore(dbPath("traces")),
+			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
 			transformer.NewLevelDbStore(dbPath("statistics-trace-aggregates")),
+			transformer.NewLevelDbStore(dbPath("statistics-session-aggregates")),
 			transformer.NewLevelDbStore(dbPath("statistics-node-aggregates")),
 			jsonHandle,
+			transformer.NewLevelDbStore(dbPath("statistics-sessions")),
 			transformer.NewLevelDbStore(dbPath("statistics-trace-key-ranges")),
 			transformer.NewLevelDbStore(dbPath("statistics-consolidated-trace-key-ranges")),
 			workers)
