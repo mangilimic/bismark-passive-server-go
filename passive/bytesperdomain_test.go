@@ -134,8 +134,8 @@ func ExampleBytesPerDomain_single() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -192,13 +192,13 @@ func ExampleBytesPerDomain_nonZeroConstants() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(1),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(1),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(60 * 60 * 1e6), // 1:00 on Jan 1, 1970
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(7),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(7),
 			},
 		},
 	}
@@ -275,8 +275,8 @@ func ExampleBytesPerDomain_domains() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -345,8 +345,8 @@ func ExampleBytesPerDomain_domainsDoNotDoubleCount() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -415,8 +415,8 @@ func ExampleBytesPerDomain_singleCname() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -487,8 +487,8 @@ func ExampleBytesPerDomain_singleCnameAnonymizedCname() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -557,8 +557,8 @@ func ExampleBytesPerDomain_singleCnameAnonymizedDomain() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -642,23 +642,23 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionAFirst() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60)),
-				Size:                  proto.Int32(25),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(25),
+				FlowId: proto.Int32(2),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(3),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(3),
 			},
 		},
 	}
@@ -749,28 +749,28 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionALonger() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60)),
-				Size:                  proto.Int32(25),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(25),
+				FlowId: proto.Int32(2),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(3),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(3),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(120)),
-				Size:                  proto.Int32(5),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(5),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -864,23 +864,23 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionAOverlap() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(45)),
-				Size:                  proto.Int32(25),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(25),
+				FlowId: proto.Int32(2),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(3),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(3),
 			},
 		},
 	}
@@ -966,23 +966,23 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameFirst() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60)),
-				Size:                  proto.Int32(25),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(25),
+				FlowId: proto.Int32(2),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(3),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(3),
 			},
 		},
 	}
@@ -1073,28 +1073,28 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameLonger() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60)),
-				Size:                  proto.Int32(25),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(25),
+				FlowId: proto.Int32(2),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(3),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(3),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(120)),
-				Size:                  proto.Int32(5),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(5),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -1194,28 +1194,28 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameOverlap() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(30)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(50)),
-				Size:                  proto.Int32(25),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(25),
+				FlowId: proto.Int32(2),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(90)),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(3),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(3),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(120)),
-				Size:                  proto.Int32(5),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(5),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -1274,13 +1274,13 @@ func ExampleBytesPerDomain_multiplePackets() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1337,8 +1337,8 @@ func ExampleBytesPerDomain_multipleTraces() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1348,8 +1348,8 @@ func ExampleBytesPerDomain_multipleTraces() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1407,8 +1407,8 @@ func ExampleBytesPerDomain_multipleHours() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1430,18 +1430,18 @@ func ExampleBytesPerDomain_multipleHours() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60 * 60)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60 * 60)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60 * 60)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(2),
 			},
 		},
 	}
@@ -1501,8 +1501,8 @@ func ExampleBytesPerDomain_multipleFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1524,13 +1524,13 @@ func ExampleBytesPerDomain_multipleFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60 * 60)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(60 * 60)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(2),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(2),
 			},
 		},
 	}
@@ -1593,18 +1593,18 @@ func ExampleBytesPerDomain_expireDnsResponses() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(10)),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(1),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(convertSecondsToMicroseconds(20)),
-				Size:                  proto.Int32(25),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(25),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1679,13 +1679,13 @@ func ExampleBytesPerDomain_isolateDevices() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(1),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(1),
 			},
 		},
 	}
@@ -1743,8 +1743,8 @@ func ExampleBytesPerDomain_isolateSessions() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1754,8 +1754,8 @@ func ExampleBytesPerDomain_isolateSessions() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1818,8 +1818,8 @@ func ExampleBytesPerDomain_isolateNodes() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1856,8 +1856,8 @@ func ExampleBytesPerDomain_isolateNodes() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1921,8 +1921,8 @@ func ExampleBytesPerDomain_multipleRuns() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(100),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(100),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}
@@ -1932,8 +1932,8 @@ func ExampleBytesPerDomain_multipleRuns() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1),
-				Size:                  proto.Int32(50),
-				FlowId:                proto.Int32(0),
+				Size:   proto.Int32(50),
+				FlowId: proto.Int32(0),
 			},
 		},
 	}

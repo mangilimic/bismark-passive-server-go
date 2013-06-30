@@ -275,18 +275,18 @@ func TestParseSectionPacketSeries_Valid(t *testing.T) {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(10),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(23),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(23),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(30),
-				Size:                  proto.Int32(12),
-				FlowId:                proto.Int32(45),
+				Size:   proto.Int32(12),
+				FlowId: proto.Int32(45),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(40),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(20),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(20),
 			},
 		},
 	}
@@ -781,23 +781,23 @@ c43dc79106a8 1336ec0318683863
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359146721),
-				Size:                  proto.Int32(74),
-				FlowId:                proto.Int32(31646),
+				Size:   proto.Int32(74),
+				FlowId: proto.Int32(31646),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359147219),
-				Size:                  proto.Int32(74),
-				FlowId:                proto.Int32(25349),
+				Size:   proto.Int32(74),
+				FlowId: proto.Int32(25349),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359198044),
-				Size:                  proto.Int32(174),
-				FlowId:                proto.Int32(34629),
+				Size:   proto.Int32(174),
+				FlowId: proto.Int32(34629),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1346479359210367),
-				Size:                  proto.Int32(174),
-				FlowId:                proto.Int32(36522),
+				Size:   proto.Int32(174),
+				FlowId: proto.Int32(36522),
 			},
 		},
 		FlowTableBaseline: proto.Int64(1346479359),

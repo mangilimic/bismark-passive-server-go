@@ -65,8 +65,8 @@ func ExampleBytesPerDevice_single() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -103,8 +103,8 @@ func ExampleBytesPerDevice_missingSequenceNumber() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -124,8 +124,8 @@ func ExampleBytesPerDevice_missingSequenceNumber() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(13),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(13),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -133,8 +133,8 @@ func ExampleBytesPerDevice_missingSequenceNumber() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -168,8 +168,8 @@ func ExampleBytesPerDevice_missingMac() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -206,8 +206,8 @@ func ExampleBytesPerDevice_missingFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -233,8 +233,8 @@ func ExampleBytesPerDevice_roundToHour() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1e6 * 3601), // 60 minutes, 1 second past midnight on January 1, 1970
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -271,13 +271,13 @@ func ExampleBytesPerDevice_multipleHours() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1e6 * 3600), // 1 hour past midnight on January 1, 1970
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(4),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(1e6 * 7200), // 2 hours past midnight on January 1, 1970
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -315,13 +315,13 @@ func ExampleBytesPerDevice_multipleFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(5),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(5),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -363,13 +363,13 @@ func ExampleBytesPerDevice_twoMacsPerFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(5),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(5),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -416,8 +416,8 @@ func ExampleBytesPerDevice_maskFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(30),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(30),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -442,8 +442,8 @@ func ExampleBytesPerDevice_maskFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -458,8 +458,8 @@ func ExampleBytesPerDevice_maskFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(2),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(2),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -486,8 +486,8 @@ func ExampleBytesPerDevice_maskMacAndFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(30),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(30),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -508,8 +508,8 @@ func ExampleBytesPerDevice_maskMacAndFlows() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -548,8 +548,8 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -570,8 +570,8 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(12),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(12),
+				FlowId: proto.Int32(4),
 			},
 		},
 		AddressTableEntry: []*AddressTableEntry{
@@ -602,8 +602,8 @@ func ExampleBytesPerDevice_maskMac() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -624,8 +624,8 @@ func ExampleBytesPerDevice_maskMac() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(12),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(12),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -664,8 +664,8 @@ func ExampleBytesPerDevice_multipleNodes() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -685,8 +685,8 @@ func ExampleBytesPerDevice_multipleNodes() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(3),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(3),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -728,8 +728,8 @@ func ExampleBytesPerDevice_multipleSessions() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(10),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(10),
+				FlowId: proto.Int32(4),
 			},
 		},
 		FlowTableEntry: []*FlowTableEntry{
@@ -749,8 +749,8 @@ func ExampleBytesPerDevice_multipleSessions() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(13),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(13),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
@@ -758,8 +758,8 @@ func ExampleBytesPerDevice_multipleSessions() {
 		PacketSeries: []*PacketSeriesEntry{
 			&PacketSeriesEntry{
 				TimestampMicroseconds: proto.Int64(0),
-				Size:                  proto.Int32(20),
-				FlowId:                proto.Int32(4),
+				Size:   proto.Int32(20),
+				FlowId: proto.Int32(4),
 			},
 		},
 	}
