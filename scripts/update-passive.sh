@@ -17,11 +17,11 @@ $PKG_ROOT/scanner/scanner $TARS_PATH $LEVELDB_PATH
 $PIPELINES_BIN $PIPELINE_ARGS index $LEVELDB_PATH
 $PIPELINES_BIN $PIPELINE_ARGS availability $LEVELDB_PATH --json_output=$HOME/public_html/bismark-passive/status.json
 
-PGHOST=localhost
-PGPORT=54321
-PGDATABASE=ucap_deploy_db
-PGUSER=hyojoon
-PGPASSWORD=Databasejoon82
+export PGHOST=localhost
+export PGPORT=54321
+export PGDATABASE=ucap_deploy_db
+export PGUSER=hyojoon
+export PGPASSWORD=Databasejoon82
 
 $PIPELINES_BIN $PIPELINE_ARGS bytesperminute $LEVELDB_PATH
 $PIPELINES_BIN $PIPELINE_ARGS bytesperdevice $LEVELDB_PATH
