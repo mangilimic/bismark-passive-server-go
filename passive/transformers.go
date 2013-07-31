@@ -111,13 +111,13 @@ func TraceKeyRangesPipeline(newTraceKeysStore store.Reader, traceKeyRangesStore,
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "CalculateTraceKeyRanges",
-			Transformer: transformer.TransformFunc(CalculateTraceKeyRanges),
+			Transformer: transformer.TransformFunc(calculateTraceKeyRanges),
 			Reader:      newTraceKeysStore,
 			Writer:      traceKeyRangesStore,
 		},
 		transformer.PipelineStage{
 			Name:        "ConsolidateTraceKeyRanges",
-			Transformer: transformer.TransformFunc(ConsolidateTraceKeyRanges),
+			Transformer: transformer.TransformFunc(consolidateTraceKeyRanges),
 			Reader:      traceKeyRangesStore,
 			Writer:      store.NewTruncatingWriter(consolidatedTraceKeyRangesStore),
 		},
@@ -129,7 +129,7 @@ func TraceKeyRangesPipeline(newTraceKeysStore store.Reader, traceKeyRangesStore,
 	}
 }
 
-func CalculateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
+func calculateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	var firstKey, lastKey, expectedTraceKey *TraceKey
 	for record := range inputChan {
 		var traceKey TraceKey
@@ -161,7 +161,7 @@ func CalculateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func ConsolidateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
+func consolidateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	var firstBeginKey, lastEndKey *TraceKey
 	var currentSessionKey *SessionKey
 	for record := range inputChan {
@@ -190,7 +190,16 @@ func ConsolidateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func Sessions(inputChan, outputChan chan *store.Record) {
+func SessionPipelineStage(inputStore store.Reader, sessionsStore store.Deleter) transformer.PipelineStage {
+	return transformer.PipelineStage{
+		Name:        "Sessions",
+		Transformer: transformer.TransformFunc(sessions),
+		Reader:      inputStore,
+		Writer:      store.NewTruncatingWriter(sessionsStore),
+	}
+}
+
+func sessions(inputChan, outputChan chan *store.Record) {
 	var currentSession *SessionKey
 	for record := range inputChan {
 		var session SessionKey
@@ -211,27 +220,18 @@ func Sessions(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func SessionPipelineStage(inputStore store.Reader, sessionsStore store.Deleter) transformer.PipelineStage {
+func PrintRecordsStage(name string, store store.Reader) transformer.PipelineStage {
 	return transformer.PipelineStage{
-		Name:        "Sessions",
-		Transformer: transformer.TransformFunc(Sessions),
-		Reader:      inputStore,
-		Writer:      store.NewTruncatingWriter(sessionsStore),
+		Name:        fmt.Sprintf("Print %v", name),
+		Reader:      store,
+		Transformer: transformer.TransformFunc(printRecords),
 	}
 }
 
-func PrintRecords(inputChan, outputChan chan *store.Record) {
+func printRecords(inputChan, outputChan chan *store.Record) {
 	log.Printf("PRINT RECORDS IN DATASTORE")
 	for record := range inputChan {
 		log.Printf("%s: %s (%v: %v)", record.Key, record.Value, record.Key, record.Value)
 	}
 	log.Printf("DONE PRINTING")
-}
-
-func PrintRecordsStage(name string, store store.Reader) transformer.PipelineStage {
-	return transformer.PipelineStage{
-		Name:        fmt.Sprintf("Print %v", name),
-		Reader:      store,
-		Transformer: transformer.TransformFunc(PrintRecords),
-	}
 }

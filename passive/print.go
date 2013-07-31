@@ -11,7 +11,7 @@ import (
 )
 
 func RecordPrinterPipeline(store store.Reader, keyFormat, valueFormat string) []transformer.PipelineStage {
-	printer, err := NewRecordPrinter(keyFormat, valueFormat)
+	printer, err := newRecordPrinter(keyFormat, valueFormat)
 	if err != nil {
 		panic(err)
 	}
@@ -24,7 +24,7 @@ func RecordPrinterPipeline(store store.Reader, keyFormat, valueFormat string) []
 	}
 }
 
-type RecordPrinter struct {
+type recordPrinter struct {
 	keys, values               []interface{}
 	keysIgnored, valuesIgnored []bool
 	keysRaw, valuesRaw         bool
@@ -95,8 +95,8 @@ func parsePrintFormatString(format string) ([]interface{}, []bool, bool, error) 
 	return values, ignored, raw, nil
 }
 
-func NewRecordPrinter(keyFormat, valueFormat string) (*RecordPrinter, error) {
-	var printer RecordPrinter
+func newRecordPrinter(keyFormat, valueFormat string) (*recordPrinter, error) {
+	var printer recordPrinter
 	if len(keyFormat) > 0 {
 		if keys, ignored, raw, err := parsePrintFormatString(keyFormat); err != nil {
 			return nil, err
@@ -118,7 +118,7 @@ func NewRecordPrinter(keyFormat, valueFormat string) (*RecordPrinter, error) {
 	return &printer, nil
 }
 
-func (printer *RecordPrinter) Do(inputChan, outputChan chan *store.Record) {
+func (printer *recordPrinter) Do(inputChan, outputChan chan *store.Record) {
 	for record := range inputChan {
 		if printer.keys != nil {
 			remainder := key.DecodeOrDie(record.Key, printer.keys...)
