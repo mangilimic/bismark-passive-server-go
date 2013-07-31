@@ -134,6 +134,16 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 				Writer:      transformer.NewMuxedStoreWriter(tracesStore, tarnamesIndexedStore),
 			},
 		}
+	case "lookupsperdevice":
+		return passive.LookupsPerDevicePipeline(
+			transformer.NewLevelDbStore(dbPath("traces")),
+			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
+			transformer.NewLevelDbStore(dbPath("bytesperdomain-address-id-table")),
+			transformer.NewLevelDbStore(dbPath("lookupsperdevice-address-id-to-domain")),
+			transformer.NewLevelDbStore(dbPath("lookupsperdevice-sharded")),
+			transformer.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device")),
+			transformer.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device-per-hour")),
+			workers)
 	case "print":
 		flagset := flag.NewFlagSet("print", flag.ExitOnError)
 		storePath := flagset.String("leveldb", "", "Print the contents of this LevelDB")

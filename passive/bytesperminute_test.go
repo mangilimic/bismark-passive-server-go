@@ -11,7 +11,7 @@ import (
 func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
 	return &PacketSeriesEntry{
 		TimestampMicroseconds: proto.Int64(timestamp),
-		Size:                  proto.Int32(size),
+		Size: proto.Int32(size),
 	}
 }
 

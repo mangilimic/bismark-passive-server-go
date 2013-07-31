@@ -346,8 +346,8 @@ func parseSectionPacketSeries(sectionLines []string, trace *Trace) error {
 		}
 		newEntry := PacketSeriesEntry{
 			TimestampMicroseconds: &timestampMicroseconds,
-			Size:                  &size,
-			FlowId:                &flowId,
+			Size:   &size,
+			FlowId: &flowId,
 		}
 		trace.PacketSeries[index] = &newEntry
 	}
