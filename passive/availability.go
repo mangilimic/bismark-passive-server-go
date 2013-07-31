@@ -61,7 +61,7 @@ type intervalKey struct {
 	LastSequenceNumber   int32
 }
 
-func DecodeIntervalKey(encodedKey []byte) *intervalKey {
+func decodeIntervalKey(encodedKey []byte) *intervalKey {
 	decodedKey := new(intervalKey)
 	key.DecodeOrDie(
 		encodedKey,
@@ -73,7 +73,7 @@ func DecodeIntervalKey(encodedKey []byte) *intervalKey {
 	return decodedKey
 }
 
-func EncodeIntervalKey(decodedKey *intervalKey) []byte {
+func encodeIntervalKey(decodedKey *intervalKey) []byte {
 	return key.EncodeOrDie(
 		decodedKey.NodeId,
 		decodedKey.AnonymizationContext,
@@ -100,7 +100,7 @@ func availabilityIntervals(inputChan, outputChan chan *store.Record) {
 			LastSequenceNumber:   lastKey.SequenceNumber,
 		}
 		outputChan <- &store.Record{
-			Key:   EncodeIntervalKey(&intervalKey),
+			Key:   encodeIntervalKey(&intervalKey),
 			Value: key.EncodeOrDie(*firstTraceDecoded.TraceCreationTimestamp, *lastTraceDecoded.TraceCreationTimestamp),
 		}
 	}
@@ -148,7 +148,7 @@ func consolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) 
 			LastSequenceNumber:   lastKey.LastSequenceNumber,
 		}
 		outputChan <- &store.Record{
-			Key:   EncodeIntervalKey(&intervalKey),
+			Key:   encodeIntervalKey(&intervalKey),
 			Value: key.EncodeOrDie(firstIntervalStart, lastIntervalEnd),
 		}
 	}
@@ -157,7 +157,7 @@ func consolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) 
 	var firstInterval, lastInterval []byte
 	var previousSessionKeyEncoded []byte
 	for record := range inputChan {
-		intervalKey := DecodeIntervalKey(record.Key)
+		intervalKey := decodeIntervalKey(record.Key)
 		sessionKey := SessionKey{
 			NodeId:               intervalKey.NodeId,
 			AnonymizationContext: intervalKey.AnonymizationContext,
@@ -198,7 +198,7 @@ func availabilityReducer(inputChan, outputChan chan *store.Record) {
 	var currentNode []byte
 	points := make([][]int64, 4)
 	for record := range inputChan {
-		intervalKey := DecodeIntervalKey(record.Key)
+		intervalKey := decodeIntervalKey(record.Key)
 
 		if !bytes.Equal(currentNode, intervalKey.NodeId) {
 			writeRecord(currentNode, points)
@@ -259,7 +259,7 @@ func (store *availabilityJsonStore) EndWriting() error {
 }
 
 func generateExcludedRanges(record *store.Record) *store.Record {
-	intervalKey := DecodeIntervalKey(record.Key)
+	intervalKey := decodeIntervalKey(record.Key)
 	newKey := TraceKey{
 		NodeId:               intervalKey.NodeId,
 		AnonymizationContext: intervalKey.AnonymizationContext,
