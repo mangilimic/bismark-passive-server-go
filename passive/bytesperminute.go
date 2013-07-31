@@ -53,7 +53,8 @@ func (nonce BytesPerMinuteMapper) Do(inputRecord *transformer.LevelDbRecord, out
 	buckets := make(map[int64]int64)
 	for _, packetSeriesEntry := range trace.PacketSeries {
 		timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds*1000)
-		minuteTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), 0, 0, time.UTC)
+        log.Println(timestamp)
+		minuteTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), 0, 0, timestamp.Location())
 		buckets[minuteTimestamp.Unix()] += int64(*packetSeriesEntry.Size)
 	}
 

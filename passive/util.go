@@ -20,7 +20,7 @@ func maxInt64(a, b int64) int64 {
 
 func truncateTimestampToHour(timestampMicroseconds int64) int64 {
 	timestamp := time.Unix(convertMicrosecondsToSeconds(timestampMicroseconds), 0)
-	return time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), 0, 0, 0, time.UTC).Unix()
+	return time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), 0, 0, 0, timestamp.Location()).Unix()
 }
 
 func convertMicrosecondsToSeconds(timestamp int64) int64 {

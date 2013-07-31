@@ -103,7 +103,7 @@ func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan ch
 			continue
 		}
 		timestamp := time.Unix(0, *packetSeriesEntry.TimestampMicroseconds*1000)
-		hourTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), 0, 0, 0, time.UTC)
+		hourTimestamp := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), 0, 0, 0, timestamp.Location())
 		if _, ok := buckets[*packetSeriesEntry.FlowId]; !ok {
 			buckets[*packetSeriesEntry.FlowId] = make(map[int64]int64)
 		}
