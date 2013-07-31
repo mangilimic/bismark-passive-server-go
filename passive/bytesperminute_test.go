@@ -1,11 +1,13 @@
 package passive
 
 import (
-	"code.google.com/p/goprotobuf/proto"
 	"fmt"
+	"time"
+
+	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"time"
+	"github.com/sburnett/transformer/store"
 )
 
 func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
@@ -16,13 +18,13 @@ func makePacketSeriesEntry(timestamp int64, size int32) *PacketSeriesEntry {
 }
 
 func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
-	bytesPerMinuteStore := transformer.SliceStore{}
-	bytesPerHourStore := transformer.SliceStore{}
-	bytesPerHourPostgresStore := transformer.SliceStore{}
-	tracesStore := transformer.SliceStore{}
-	mappedStore := transformer.SliceStore{}
-	traceKeyRangesStore := transformer.SliceStore{}
-	consolidatedTraceKeyRangesStore := transformer.SliceStore{}
+	bytesPerMinuteStore := store.SliceStore{}
+	bytesPerHourStore := store.SliceStore{}
+	bytesPerHourPostgresStore := store.SliceStore{}
+	tracesStore := store.SliceStore{}
+	mappedStore := store.SliceStore{}
+	traceKeyRangesStore := store.SliceStore{}
+	consolidatedTraceKeyRangesStore := store.SliceStore{}
 
 	for _, traces := range allTraces {
 		tracesStore.BeginWriting()
@@ -31,7 +33,7 @@ func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
 			if err != nil {
 				panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 			}
-			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+			tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 		}
 		tracesStore.EndWriting()
 		transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, &bytesPerHourStore, &bytesPerHourPostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)

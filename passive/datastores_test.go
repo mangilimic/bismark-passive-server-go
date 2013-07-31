@@ -2,24 +2,25 @@ package passive
 
 import (
 	"fmt"
-	"github.com/sburnett/transformer"
+
 	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
-func makeRecordToInclude(nodeId string, sequenceNumber int32) *transformer.LevelDbRecord {
+func makeRecordToInclude(nodeId string, sequenceNumber int32) *store.Record {
 	traceKey := TraceKey{
 		NodeId:               []byte(nodeId),
 		AnonymizationContext: []byte("context"),
 		SessionId:            0,
 		SequenceNumber:       sequenceNumber,
 	}
-	return &transformer.LevelDbRecord{
+	return &store.Record{
 		Key:   key.EncodeOrDie(&traceKey),
 		Value: []byte{},
 	}
 }
 
-func runIncludeNodes(records transformer.StoreReader) {
+func runIncludeNodes(records store.Reader) {
 	records.BeginReading()
 	for {
 		record, err := records.ReadRecord()
@@ -37,7 +38,7 @@ func runIncludeNodes(records transformer.StoreReader) {
 }
 
 func ExampleIncludeNodes() {
-	inputRecords := transformer.SliceStore{}
+	inputRecords := store.SliceStore{}
 	inputRecords.BeginWriting()
 	inputRecords.WriteRecord(makeRecordToInclude("node1", 1))
 	inputRecords.WriteRecord(makeRecordToInclude("node1", 2))
@@ -57,7 +58,7 @@ func ExampleIncludeNodes() {
 }
 
 func ExampleIncludeNodes_multipleNodes() {
-	inputRecords := transformer.SliceStore{}
+	inputRecords := store.SliceStore{}
 	inputRecords.BeginWriting()
 	inputRecords.WriteRecord(makeRecordToInclude("node1", 1))
 	inputRecords.WriteRecord(makeRecordToInclude("node1", 2))

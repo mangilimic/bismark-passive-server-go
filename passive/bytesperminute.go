@@ -2,20 +2,22 @@ package passive
 
 import (
 	"bytes"
-	"code.google.com/p/goprotobuf/proto"
 	"database/sql"
+	"log"
+	"time"
+
+	"code.google.com/p/goprotobuf/proto"
 	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"log"
-	"time"
+	"github.com/sburnett/transformer/store"
 )
 
-func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, bytesPerMinuteStore transformer.Datastore, bytesPerHourStore transformer.Datastore, bytesPerHourPostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
+func BytesPerMinutePipeline(tracesStore store.Seeker, mappedStore, bytesPerMinuteStore, bytesPerHourStore store.ReadingWriter, bytesPerHourPostgresStore store.Writer, traceKeyRangesStore, consolidatedTraceKeyRangesStore store.ReadingDeleter, workers int) []transformer.PipelineStage {
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
-			Reader:      transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore),
+			Reader:      store.NewRangeExcludingReader(tracesStore, traceKeyRangesStore),
 			Transformer: transformer.MakeDoTransformer(BytesPerMinuteMapper(transformer.NewNonce()), workers),
 			Writer:      mappedStore,
 		},
@@ -36,12 +38,12 @@ func BytesPerMinutePipeline(tracesStore transformer.StoreSeeker, mappedStore, by
 			Reader: bytesPerHourStore,
 			Writer: bytesPerHourPostgresStore,
 		},
-	}, TraceKeyRangesPipeline(transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
+	}, TraceKeyRangesPipeline(store.NewRangeExcludingReader(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
 type BytesPerMinuteMapper transformer.Nonce
 
-func (nonce BytesPerMinuteMapper) Do(inputRecord *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
+func (nonce BytesPerMinuteMapper) Do(inputRecord *store.Record, outputChan chan *store.Record) {
 	var traceKey TraceKey
 	key.DecodeOrDie(inputRecord.Key, &traceKey)
 
@@ -59,14 +61,14 @@ func (nonce BytesPerMinuteMapper) Do(inputRecord *transformer.LevelDbRecord, out
 	}
 
 	for timestamp, size := range buckets {
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(traceKey.NodeId, timestamp, transformer.Nonce(nonce).Get()),
 			Value: key.EncodeOrDie(size),
 		}
 	}
 }
 
-func BytesPerMinuteReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func BytesPerMinuteReducer(inputChan, outputChan chan *store.Record) {
 	var node []byte
 	var timestamp int64
 	grouper := transformer.GroupRecords(inputChan, &node, &timestamp)
@@ -78,7 +80,7 @@ func BytesPerMinuteReducer(inputChan, outputChan chan *transformer.LevelDbRecord
 			key.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(node, timestamp),
 			Value: key.EncodeOrDie(totalSize),
 		}
@@ -91,7 +93,7 @@ func getHour(timestamp int64) int64 {
 	return hour.Unix()
 }
 
-func BytesPerHourReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func BytesPerHourReducer(inputChan, outputChan chan *store.Record) {
 	var currentNode []byte
 	currentHour := int64(-1)
 	var currentSize int64
@@ -103,7 +105,7 @@ func BytesPerHourReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 
 		if !bytes.Equal(node, currentNode) || hour != currentHour {
 			if currentNode != nil && currentHour >= 0 {
-				outputChan <- &transformer.LevelDbRecord{
+				outputChan <- &store.Record{
 					Key:   key.EncodeOrDie(currentNode, currentHour),
 					Value: key.EncodeOrDie(currentSize),
 				}
@@ -118,7 +120,7 @@ func BytesPerHourReducer(inputChan, outputChan chan *transformer.LevelDbRecord) 
 		currentSize += value
 	}
 	if currentNode != nil && currentHour >= 0 {
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(currentNode, currentHour),
 			Value: key.EncodeOrDie(currentSize),
 		}
@@ -167,7 +169,7 @@ func (store *BytesPerHourPostgresStore) BeginWriting() error {
 	return nil
 }
 
-func (store *BytesPerHourPostgresStore) WriteRecord(record *transformer.LevelDbRecord) error {
+func (store *BytesPerHourPostgresStore) WriteRecord(record *store.Record) error {
 	var nodeId []byte
 	var timestamp, size int64
 

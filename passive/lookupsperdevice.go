@@ -1,14 +1,16 @@
 package passive
 
 import (
+	"regexp"
+
 	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"regexp"
+	"github.com/sburnett/transformer/store"
 )
 
-func LookupsPerDevicePipeline(tracesStore, availabilityIntervalsStore, addressIdStore transformer.StoreSeeker, addressIdToDomainStore, lookupsPerDeviceSharded transformer.DatastoreFull, lookupsPerDeviceStore, lookupsPerDevicePerHourStore transformer.StoreWriter, workers int) []transformer.PipelineStage {
-	consistentTracesStore := transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore)
+func LookupsPerDevicePipeline(tracesStore, availabilityIntervalsStore, addressIdStore store.Seeker, addressIdToDomainStore store.SeekingWriter, lookupsPerDeviceSharded store.ReadingWriter, lookupsPerDeviceStore, lookupsPerDevicePerHourStore store.Writer, workers int) []transformer.PipelineStage {
+	consistentTracesStore := store.NewRangeIncludingReader(tracesStore, availabilityIntervalsStore)
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "LookupsPerDeviceMapper",
@@ -18,7 +20,7 @@ func LookupsPerDevicePipeline(tracesStore, availabilityIntervalsStore, addressId
 		},
 		transformer.PipelineStage{
 			Name:        "JoinMacWithLookups",
-			Reader:      transformer.NewDemuxStoreSeeker(addressIdStore, addressIdToDomainStore),
+			Reader:      store.NewDemuxingSeeker(addressIdStore, addressIdToDomainStore),
 			Transformer: transformer.TransformFunc(JoinMacWithLookups),
 			Writer:      lookupsPerDeviceSharded,
 		},
@@ -37,7 +39,7 @@ func LookupsPerDevicePipeline(tracesStore, availabilityIntervalsStore, addressId
 	}
 }
 
-func LookupsPerDeviceMapper(record *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
+func LookupsPerDeviceMapper(record *store.Record, outputChan chan *store.Record) {
 	mobileDomainRegexp, err := regexp.Compile(`(^m\.|\.m\.)`)
 	if err != nil {
 		panic(err)
@@ -84,7 +86,7 @@ func LookupsPerDeviceMapper(record *transformer.LevelDbRecord, outputChan chan *
 
 	for addressId, domainsMap := range allDomains {
 		for domain, count := range domainsMap {
-			outputChan <- &transformer.LevelDbRecord{
+			outputChan <- &store.Record{
 				Key:   key.EncodeOrDie(traceKey.SessionKey(), addressId, traceKey.SequenceNumber, domain),
 				Value: key.EncodeOrDie(count),
 			}
@@ -92,7 +94,7 @@ func LookupsPerDeviceMapper(record *transformer.LevelDbRecord, outputChan chan *
 	}
 }
 
-func JoinMacWithLookups(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func JoinMacWithLookups(inputChan, outputChan chan *store.Record) {
 	var (
 		session   SessionKey
 		addressId int32
@@ -112,7 +114,7 @@ func JoinMacWithLookups(inputChan, outputChan chan *transformer.LevelDbRecord) {
 						domain         string
 					)
 					key.DecodeOrDie(record.Key, &sequenceNumber, &domain)
-					outputChan <- &transformer.LevelDbRecord{
+					outputChan <- &store.Record{
 						Key:   key.EncodeOrDie(session.NodeId, macAddress, domain, session.AnonymizationContext, session.SessionId, sequenceNumber),
 						Value: record.Value,
 					}
@@ -122,7 +124,7 @@ func JoinMacWithLookups(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	}
 }
 
-func FlattenLookupsToNodeAndMac(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func FlattenLookupsToNodeAndMac(inputChan, outputChan chan *store.Record) {
 	var nodeId, macAddress, domain string
 	grouper := transformer.GroupRecords(inputChan, &nodeId, &macAddress, &domain)
 	for grouper.NextGroup() {
@@ -133,14 +135,14 @@ func FlattenLookupsToNodeAndMac(inputChan, outputChan chan *transformer.LevelDbR
 			key.DecodeOrDie(record.Value, &count)
 			totalCount += count
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(nodeId, macAddress, domain),
 			Value: key.EncodeOrDie(totalCount),
 		}
 	}
 }
 
-func FlattenLookupsToNodeMacAndTimestamp(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func FlattenLookupsToNodeMacAndTimestamp(inputChan, outputChan chan *store.Record) {
 	var nodeId, macAddress, domain string
 	grouper := transformer.GroupRecords(inputChan, &nodeId, &macAddress, &domain)
 	for grouper.NextGroup() {
@@ -159,7 +161,7 @@ func FlattenLookupsToNodeMacAndTimestamp(inputChan, outputChan chan *transformer
 			totalCounts[timestamp] += count
 		}
 		for timestamp, totalCount := range totalCounts {
-			outputChan <- &transformer.LevelDbRecord{
+			outputChan <- &store.Record{
 				Key:   key.EncodeOrDie(nodeId, macAddress, domain, timestamp),
 				Value: key.EncodeOrDie(totalCount),
 			}

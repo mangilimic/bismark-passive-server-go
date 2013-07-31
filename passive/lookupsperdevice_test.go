@@ -1,42 +1,44 @@
 package passive
 
 import (
-	"code.google.com/p/goprotobuf/proto"
 	"fmt"
+
+	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
-func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*transformer.LevelDbRecord, addressIdToMac map[string]string) {
-	tracesStore := transformer.SliceStore{}
+func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*store.Record, addressIdToMac map[string]string) {
+	tracesStore := store.SliceStore{}
 	tracesStore.BeginWriting()
 	for encodedKey, trace := range traces {
 		encodedTrace, err := proto.Marshal(&trace)
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 	}
 	tracesStore.EndWriting()
 
-	availabilityIntervalsStore := transformer.SliceStore{}
+	availabilityIntervalsStore := store.SliceStore{}
 	availabilityIntervalsStore.BeginWriting()
 	for _, record := range consistentRanges {
 		availabilityIntervalsStore.WriteRecord(record)
 	}
 	availabilityIntervalsStore.EndWriting()
 
-	addressIdStore := transformer.SliceStore{}
+	addressIdStore := store.SliceStore{}
 	addressIdStore.BeginWriting()
 	for encodedKey, encodedValue := range addressIdToMac {
-		addressIdStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: []byte(encodedValue)})
+		addressIdStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: []byte(encodedValue)})
 	}
 	addressIdStore.EndWriting()
 
-	addressIdToDomainStore := transformer.SliceStore{}
-	lookupsPerDeviceSharded := transformer.SliceStore{}
-	lookupsPerDeviceStore := transformer.SliceStore{}
-	lookupsPerDevicePerHourStore := transformer.SliceStore{}
+	addressIdToDomainStore := store.SliceStore{}
+	lookupsPerDeviceSharded := store.SliceStore{}
+	lookupsPerDeviceStore := store.SliceStore{}
+	lookupsPerDevicePerHourStore := store.SliceStore{}
 
 	transformer.RunPipeline(LookupsPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &addressIdStore, &addressIdToDomainStore, &lookupsPerDeviceSharded, &lookupsPerDeviceStore, &lookupsPerDevicePerHourStore, 1), 0)
 
@@ -83,7 +85,7 @@ func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*tr
 
 func ExampleLookupsPerDevice_empty() {
 	traces := map[string]Trace{}
-	consistentRanges := []*transformer.LevelDbRecord{}
+	consistentRanges := []*store.Record{}
 	addressIdStore := map[string]string{}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -107,8 +109,8 @@ func ExampleLookupsPerDevice_oneDomain() {
 	traces := map[string]Trace{
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
@@ -142,8 +144,8 @@ func ExampleLookupsPerDevice_oneCname() {
 	traces := map[string]Trace{
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
@@ -187,8 +189,8 @@ func ExampleLookupsPerDevice_matchDomain() {
 	traces := map[string]Trace{
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
@@ -227,8 +229,8 @@ func ExampleLookupsPerDevice_multipleAddresses() {
 	traces := map[string]Trace{
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
@@ -272,8 +274,8 @@ func ExampleLookupsPerDevice_anonymization() {
 	traces := map[string]Trace{
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
@@ -308,8 +310,8 @@ func ExampleLookupsPerDevice_multipleLookups() {
 	traces := map[string]Trace{
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
@@ -343,8 +345,8 @@ func ExampleLookupsPerDevice_multipleTraces() {
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(1))):   trace,
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(120))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(120)),
 		},
@@ -378,8 +380,8 @@ func ExampleLookupsPerDevice_aliasAddresses() {
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(1))): trace,
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(1)),
 		},

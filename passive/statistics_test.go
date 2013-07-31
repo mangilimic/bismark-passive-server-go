@@ -2,10 +2,12 @@ package passive
 
 import (
 	"bytes"
-	"code.google.com/p/goprotobuf/proto"
 	"fmt"
+
+	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
 func makeTraceWithStatistics(packetSizes []int, packetsDropped, pcapDropped, interfaceDropped, numFlows, flowsDropped int) Trace {
@@ -28,21 +30,21 @@ func makeTraceWithStatistics(packetSizes []int, packetsDropped, pcapDropped, int
 	return trace
 }
 
-func runAggregateStatisticsPipeline(consistentRanges []*transformer.LevelDbRecord, allTraces ...map[string]Trace) {
-	tracesStore := transformer.SliceStore{}
-	availabilityIntervalsStore := transformer.SliceStore{}
+func runAggregateStatisticsPipeline(consistentRanges []*store.Record, allTraces ...map[string]Trace) {
+	tracesStore := store.SliceStore{}
+	availabilityIntervalsStore := store.SliceStore{}
 	availabilityIntervalsStore.BeginWriting()
 	for _, record := range consistentRanges {
 		availabilityIntervalsStore.WriteRecord(record)
 	}
 	availabilityIntervalsStore.EndWriting()
-	traceAggregatesStore := transformer.SliceStore{}
-	sessionAggregatesStore := transformer.SliceStore{}
-	nodeAggregatesStore := transformer.SliceStore{}
+	traceAggregatesStore := store.SliceStore{}
+	sessionAggregatesStore := store.SliceStore{}
+	nodeAggregatesStore := store.SliceStore{}
 	var writer *bytes.Buffer
-	sessionsStore := transformer.SliceStore{}
-	traceKeyRangesStore := transformer.SliceStore{}
-	consolidatedTraceKeyRangesStore := transformer.SliceStore{}
+	sessionsStore := store.SliceStore{}
+	traceKeyRangesStore := store.SliceStore{}
+	consolidatedTraceKeyRangesStore := store.SliceStore{}
 	for _, traces := range allTraces {
 		tracesStore.BeginWriting()
 		for encodedKey, trace := range traces {
@@ -50,7 +52,7 @@ func runAggregateStatisticsPipeline(consistentRanges []*transformer.LevelDbRecor
 			if err != nil {
 				panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 			}
-			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+			tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 		}
 		tracesStore.EndWriting()
 
@@ -62,8 +64,8 @@ func runAggregateStatisticsPipeline(consistentRanges []*transformer.LevelDbRecor
 }
 
 func ExampleAggregateStatisticsPipeline() {
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
 		},
@@ -80,12 +82,12 @@ func ExampleAggregateStatisticsPipeline() {
 }
 
 func ExampleAggregateStatisticsPipeline_multipleNodes() {
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
-		&transformer.LevelDbRecord{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon0", int64(0), int32(1)),
 		},
@@ -103,12 +105,12 @@ func ExampleAggregateStatisticsPipeline_multipleNodes() {
 }
 
 func ExampleAggregateStatisticsPipeline_multipleSessions() {
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
-		&transformer.LevelDbRecord{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(1), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(1), int32(1)),
 		},
@@ -126,8 +128,8 @@ func ExampleAggregateStatisticsPipeline_multipleSessions() {
 }
 
 func ExampleAggregateStatisticsPipeline_multipleRuns() {
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
 		},

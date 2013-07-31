@@ -2,11 +2,13 @@ package passive
 
 import (
 	"fmt"
-	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"io/ioutil"
 	"log"
 	"os"
+
+	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
 const LogDuringTests bool = false
@@ -31,15 +33,15 @@ func formatSessionKey(sessionKey []byte) string {
 	return fmt.Sprintf("%s,%s,%d", decoded.NodeId, decoded.AnonymizationContext, decoded.SessionId)
 }
 
-func runSessions(records []*transformer.LevelDbRecord) {
-	traces := transformer.SliceStore{}
+func runSessions(records []*store.Record) {
+	traces := store.SliceStore{}
 	traces.BeginWriting()
 	for _, record := range records {
 		traces.WriteRecord(record)
 	}
 	traces.EndWriting()
 
-	sessionsStore := transformer.SliceStore{}
+	sessionsStore := store.SliceStore{}
 	transformer.RunPipeline([]transformer.PipelineStage{
 		SessionPipelineStage(&traces, &sessionsStore),
 	}, 0)
@@ -58,14 +60,14 @@ func runSessions(records []*transformer.LevelDbRecord) {
 	sessionsStore.EndReading()
 }
 
-func makeTraceKey(nodeId, anonymizationContext string, sessionId, sequenceNumber int) *transformer.LevelDbRecord {
+func makeTraceKey(nodeId, anonymizationContext string, sessionId, sequenceNumber int) *store.Record {
 	traceKey := TraceKey{
 		NodeId:               []byte(nodeId),
 		AnonymizationContext: []byte(anonymizationContext),
 		SessionId:            int64(sessionId),
 		SequenceNumber:       int32(sequenceNumber),
 	}
-	return &transformer.LevelDbRecord{
+	return &store.Record{
 		Key: key.EncodeOrDie(&traceKey),
 	}
 }
@@ -76,16 +78,16 @@ func formatTraceKey(traceKey []byte) string {
 	return fmt.Sprintf("%s,%s,%d,%d", decoded.NodeId, decoded.AnonymizationContext, decoded.SessionId, decoded.SequenceNumber)
 }
 
-func runCalculateTraceKeyRanges(records []*transformer.LevelDbRecord) {
-	traces := transformer.SliceStore{}
+func runCalculateTraceKeyRanges(records []*store.Record) {
+	traces := store.SliceStore{}
 	traces.BeginWriting()
 	for _, record := range records {
 		traces.WriteRecord(record)
 	}
 	traces.EndWriting()
 
-	rangesStore := transformer.SliceStore{}
-	consolidatedStore := transformer.SliceStore{}
+	rangesStore := store.SliceStore{}
+	consolidatedStore := store.SliceStore{}
 	transformer.RunPipeline(TraceKeyRangesPipeline(&traces, &rangesStore, &consolidatedStore), 0)
 
 	rangesStore.BeginReading()
@@ -102,19 +104,19 @@ func runCalculateTraceKeyRanges(records []*transformer.LevelDbRecord) {
 	rangesStore.EndReading()
 }
 
-func runConsolidateTraceKeyRanges(records, moreRecords []*transformer.LevelDbRecord) {
-	traces := transformer.SliceStore{}
+func runConsolidateTraceKeyRanges(records, moreRecords []*store.Record) {
+	traces := store.SliceStore{}
 	traces.BeginWriting()
 	for _, record := range records {
 		traces.WriteRecord(record)
 	}
 	traces.EndWriting()
 
-	rangesStore := transformer.SliceStore{}
-	consolidatedStore := transformer.SliceStore{}
+	rangesStore := store.SliceStore{}
+	consolidatedStore := store.SliceStore{}
 	transformer.RunPipeline(TraceKeyRangesPipeline(&traces, &rangesStore, &consolidatedStore), 0)
 
-	moreTraces := transformer.SliceStore{}
+	moreTraces := store.SliceStore{}
 	moreTraces.BeginWriting()
 	for _, record := range moreRecords {
 		moreTraces.WriteRecord(record)
@@ -138,7 +140,7 @@ func runConsolidateTraceKeyRanges(records, moreRecords []*transformer.LevelDbRec
 }
 
 func ExampleTraceKeyTraces() {
-	runCalculateTraceKeyRanges([]*transformer.LevelDbRecord{
+	runCalculateTraceKeyRanges([]*store.Record{
 		makeTraceKey("node", "context", 10, 0),
 		makeTraceKey("node", "context", 10, 1),
 		makeTraceKey("node", "context", 10, 3),
@@ -154,7 +156,7 @@ func ExampleTraceKeyTraces() {
 }
 
 func ExampleTraceKeyTraces_multipleSesssions() {
-	runCalculateTraceKeyRanges([]*transformer.LevelDbRecord{
+	runCalculateTraceKeyRanges([]*store.Record{
 		makeTraceKey("node0", "context1", 10, 0),
 		makeTraceKey("node1", "context1", 10, 1),
 		makeTraceKey("node1", "context2", 10, 2),
@@ -169,14 +171,14 @@ func ExampleTraceKeyTraces_multipleSesssions() {
 }
 
 func ExampleTraceKeyTraces_multipleRounds() {
-	runConsolidateTraceKeyRanges([]*transformer.LevelDbRecord{
+	runConsolidateTraceKeyRanges([]*store.Record{
 		makeTraceKey("node", "context", 10, 0),
 		makeTraceKey("node", "context", 10, 1),
 		makeTraceKey("node", "context", 10, 3),
 		makeTraceKey("node", "context", 10, 4),
 		makeTraceKey("node", "context", 10, 5),
 		makeTraceKey("node", "context", 10, 7),
-	}, []*transformer.LevelDbRecord{
+	}, []*store.Record{
 		makeTraceKey("node", "context", 10, 2),
 		makeTraceKey("node", "context", 10, 6),
 	})
@@ -186,13 +188,13 @@ func ExampleTraceKeyTraces_multipleRounds() {
 }
 
 func ExampleTraceKeyTraces_multipleRoundsWithHoles() {
-	runConsolidateTraceKeyRanges([]*transformer.LevelDbRecord{
+	runConsolidateTraceKeyRanges([]*store.Record{
 		makeTraceKey("node", "context", 10, 0),
 		makeTraceKey("node", "context", 10, 1),
 		makeTraceKey("node", "context", 10, 3),
 		makeTraceKey("node", "context", 10, 5),
 		makeTraceKey("node", "context", 10, 7),
-	}, []*transformer.LevelDbRecord{
+	}, []*store.Record{
 		makeTraceKey("node", "context", 10, 2),
 		makeTraceKey("node", "context", 10, 6),
 	})
@@ -203,7 +205,7 @@ func ExampleTraceKeyTraces_multipleRoundsWithHoles() {
 }
 
 func ExampleSessions() {
-	runSessions([]*transformer.LevelDbRecord{
+	runSessions([]*store.Record{
 		makeTraceKey("node", "context", 0, 0),
 		makeTraceKey("node", "context", 0, 1),
 		makeTraceKey("node", "context", 0, 2),

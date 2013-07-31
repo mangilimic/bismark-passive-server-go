@@ -1,27 +1,29 @@
 package passive
 
 import (
-	"code.google.com/p/goprotobuf/proto"
 	"fmt"
-	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"io"
 	"math"
+
+	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
-func AggregateStatisticsPipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, traceAggregatesStore, sessionAggregatesStore transformer.DatastoreFull, nodeAggregatesStore transformer.Datastore, jsonWriter io.Writer, sessionsStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
-	newTracesStore := transformer.ReadExcludingRanges(transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
+func AggregateStatisticsPipeline(tracesStore, availabilityIntervalsStore store.Seeker, traceAggregatesStore store.SeekingWriter, sessionAggregatesStore store.ReadingWriter, nodeAggregatesStore store.ReadingWriter, jsonWriter io.Writer, sessionsStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore store.ReadingDeleter, workers int) []transformer.PipelineStage {
+	newTracesStore := store.NewRangeExcludingReader(store.NewRangeIncludingReader(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "AggregateStatisticsMapper",
-			Reader:      transformer.ReadExcludingRanges(tracesStore, traceKeyRangesStore),
+			Reader:      store.NewRangeExcludingReader(tracesStore, traceKeyRangesStore),
 			Transformer: transformer.MakeMapFunc(AggregateStatisticsMapper, workers),
 			Writer:      traceAggregatesStore,
 		},
 		SessionPipelineStage(newTracesStore, sessionsStore),
 		transformer.PipelineStage{
 			Name:        "AggregateStatisticsReduceBySession",
-			Reader:      transformer.ReadIncludingPrefixes(traceAggregatesStore, sessionsStore),
+			Reader:      store.NewPrefixIncludingReader(traceAggregatesStore, sessionsStore),
 			Transformer: transformer.TransformFunc(AggregateStatisticsReduceBySession),
 			Writer:      sessionAggregatesStore,
 		},
@@ -39,7 +41,7 @@ func AggregateStatisticsPipeline(tracesStore, availabilityIntervalsStore transfo
 	}, TraceKeyRangesPipeline(newTracesStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
-func AggregateStatisticsMapper(record *transformer.LevelDbRecord) *transformer.LevelDbRecord {
+func AggregateStatisticsMapper(record *store.Record) *store.Record {
 	var trace Trace
 	if err := proto.Unmarshal(record.Value, &trace); err != nil {
 		panic(err)
@@ -62,7 +64,7 @@ func AggregateStatisticsMapper(record *transformer.LevelDbRecord) *transformer.L
 	if err != nil {
 		panic(err)
 	}
-	return &transformer.LevelDbRecord{
+	return &store.Record{
 		Key:   record.Key,
 		Value: encodedStatistics,
 	}
@@ -92,7 +94,7 @@ func mergeAggregateStatistics(source, destination *AggregateStatistics) {
 	*destination.Bytes += *source.Bytes
 }
 
-func AggregateStatisticsReduceBySession(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func AggregateStatisticsReduceBySession(inputChan, outputChan chan *store.Record) {
 	var session SessionKey
 	grouper := transformer.GroupRecords(inputChan, &session)
 	for grouper.NextGroup() {
@@ -135,14 +137,14 @@ func AggregateStatisticsReduceBySession(inputChan, outputChan chan *transformer.
 		if err != nil {
 			panic(err)
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(&session),
 			Value: encodedStatistics,
 		}
 	}
 }
 
-func AggregateStatisticsReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func AggregateStatisticsReducer(inputChan, outputChan chan *store.Record) {
 	var nodeId []byte
 	grouper := transformer.GroupRecords(inputChan, &nodeId)
 	for grouper.NextGroup() {
@@ -166,7 +168,7 @@ func AggregateStatisticsReducer(inputChan, outputChan chan *transformer.LevelDbR
 		if err != nil {
 			panic(err)
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(nodeId),
 			Value: encodedStatistics,
 		}
@@ -186,7 +188,7 @@ func (store *AggregateStatisticsJsonStore) BeginWriting() error {
 	return nil
 }
 
-func (store *AggregateStatisticsJsonStore) WriteRecord(record *transformer.LevelDbRecord) error {
+func (store *AggregateStatisticsJsonStore) WriteRecord(record *store.Record) error {
 	var nodeId string
 	key.DecodeOrDie(record.Key, &nodeId)
 	if store.first {

@@ -1,18 +1,18 @@
 package passive
 
 import (
-	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
-func IncludeNodes(reader transformer.StoreSeeker, nodes ...string) transformer.StoreSeeker {
-	nodesStore := transformer.SliceStore{}
+func IncludeNodes(reader store.Seeker, nodes ...string) store.Seeker {
+	nodesStore := store.SliceStore{}
 	nodesStore.BeginWriting()
 	for _, node := range nodes {
-		nodesStore.WriteRecord(&transformer.LevelDbRecord{
+		nodesStore.WriteRecord(&store.Record{
 			Key: key.EncodeOrDie(node),
 		})
 	}
 	nodesStore.EndWriting()
-	return transformer.ReadIncludingPrefixes(reader, &nodesStore)
+	return store.NewPrefixIncludingReader(reader, &nodesStore)
 }

@@ -2,14 +2,16 @@ package passive
 
 import (
 	"bytes"
-	"code.google.com/p/goprotobuf/proto"
 	"fmt"
+
+	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
 func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) {
-	tracesStore := transformer.SliceStore{}
+	tracesStore := store.SliceStore{}
 	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range timestamps {
 		trace := Trace{
@@ -19,22 +21,22 @@ func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) 
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 	}
 	tracesStore.EndWriting()
 
-	intervalsStore := transformer.SliceStore{}
-	consolidatedStore := transformer.SliceStore{}
-	nodesStore := transformer.SliceStore{}
+	intervalsStore := store.SliceStore{}
+	consolidatedStore := store.SliceStore{}
+	nodesStore := store.SliceStore{}
 	writer := bytes.NewBuffer([]byte{})
-	excludeRangesStore := transformer.SliceStore{}
-	consistentRangesStore := transformer.SliceStore{}
+	excludeRangesStore := store.SliceStore{}
+	consistentRangesStore := store.SliceStore{}
 	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1), 0)
 	fmt.Printf("%s", writer.Bytes())
 }
 
 func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[string]int64, moreTimestamps map[string]int64) {
-	tracesStore := transformer.SliceStore{}
+	tracesStore := store.SliceStore{}
 	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range timestamps {
 		trace := Trace{
@@ -44,16 +46,16 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 	}
 	tracesStore.EndWriting()
 
-	intervalsStore := transformer.SliceStore{}
-	consolidatedStore := transformer.SliceStore{}
-	nodesStore := transformer.SliceStore{}
+	intervalsStore := store.SliceStore{}
+	consolidatedStore := store.SliceStore{}
+	nodesStore := store.SliceStore{}
 	writer := bytes.NewBuffer([]byte{})
-	excludeRangesStore := transformer.SliceStore{}
-	consistentRangesStore := transformer.SliceStore{}
+	excludeRangesStore := store.SliceStore{}
+	consistentRangesStore := store.SliceStore{}
 	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1), 0)
 
 	tracesStore.BeginWriting()
@@ -65,11 +67,11 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 	}
 	tracesStore.EndWriting()
 
-	anotherTracesSlice := make([]*transformer.LevelDbRecord, 0)
+	anotherTracesSlice := make([]*store.Record, 0)
 	for encodedKey, timestamp := range moreTimestamps {
 		trace := Trace{
 			TraceCreationTimestamp: proto.Int64(timestamp),
@@ -78,7 +80,7 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		anotherTracesSlice = append(anotherTracesSlice, &transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+		anotherTracesSlice = append(anotherTracesSlice, &store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 	}
 
 	anotherWriter := bytes.NewBuffer([]byte{})

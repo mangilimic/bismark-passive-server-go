@@ -3,6 +3,7 @@ package passive
 import (
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
 type FilterSessions struct {
@@ -10,7 +11,7 @@ type FilterSessions struct {
 	SessionEndTime   int64
 }
 
-func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, tracesStore, traceKeyRangesStore transformer.StoreReader, filteredStore transformer.StoreWriter) []transformer.PipelineStage {
+func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, tracesStore, traceKeyRangesStore store.Reader, filteredStore store.Writer) []transformer.PipelineStage {
 	parameters := FilterSessions{
 		SessionStartTime: sessionStartTime * 1000000,
 		SessionEndTime:   sessionEndTime * 1000000,
@@ -18,14 +19,14 @@ func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, tracesStore,
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "FilterSessions",
-			Reader:      transformer.NewDemuxStoreReader(traceKeyRangesStore, tracesStore),
+			Reader:      store.NewDemuxingReader(traceKeyRangesStore, tracesStore),
 			Transformer: parameters,
 			Writer:      filteredStore,
 		},
 	}
 }
 
-func (parameters FilterSessions) Do(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func (parameters FilterSessions) Do(inputChan, outputChan chan *store.Record) {
 	traceDuration := int64(30000000) // This is a big assumption about how clients generate traces.
 	var useCurrentSession bool
 	var currentSession *SessionKey

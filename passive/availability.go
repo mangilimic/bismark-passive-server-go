@@ -2,20 +2,22 @@ package passive
 
 import (
 	"bytes"
-	"code.google.com/p/goprotobuf/proto"
 	"encoding/json"
 	"fmt"
-	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"io"
 	"log"
+
+	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
-func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore transformer.Datastore, consolidatedStore, nodesStore transformer.DatastoreFull, jsonWriter io.Writer, excludeRangesStore transformer.DatastoreFull, consistentRangesStore transformer.StoreDeleter, timestamp int64, workers int) []transformer.PipelineStage {
+func AvailabilityPipeline(tracesStore store.Seeker, intervalsStore store.ReadingWriter, consolidatedStore, nodesStore store.ReadingDeleter, jsonWriter io.Writer, excludeRangesStore, consistentRangesStore store.ReadingDeleter, timestamp int64, workers int) []transformer.PipelineStage {
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "AvailabilityIntervals",
-			Reader:      transformer.ReadExcludingRanges(tracesStore, excludeRangesStore),
+			Reader:      store.NewRangeExcludingReader(tracesStore, excludeRangesStore),
 			Transformer: transformer.TransformFunc(AvailabilityIntervals),
 			Writer:      intervalsStore,
 		},
@@ -23,13 +25,13 @@ func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore tr
 			Name:        "ConsolidateAvailabilityIntervals",
 			Reader:      intervalsStore,
 			Transformer: transformer.TransformFunc(ConsolidateAvailabilityIntervals),
-			Writer:      transformer.TruncateBeforeWriting(consolidatedStore),
+			Writer:      store.NewTruncatingWriter(consolidatedStore),
 		},
 		transformer.PipelineStage{
 			Name:        "AvailabilityReducer",
 			Reader:      consolidatedStore,
 			Transformer: transformer.TransformFunc(AvailabilityReducer),
-			Writer:      transformer.TruncateBeforeWriting(nodesStore),
+			Writer:      store.NewTruncatingWriter(nodesStore),
 		},
 		transformer.PipelineStage{
 			Name:   "AvailabilityJson",
@@ -40,13 +42,13 @@ func AvailabilityPipeline(tracesStore transformer.StoreSeeker, intervalsStore tr
 			Name:        "GenerateExcludedRanges",
 			Reader:      consolidatedStore,
 			Transformer: transformer.MakeMapFunc(GenerateExcludedRanges, workers),
-			Writer:      transformer.TruncateBeforeWriting(excludeRangesStore),
+			Writer:      store.NewTruncatingWriter(excludeRangesStore),
 		},
 		transformer.PipelineStage{
 			Name:        "GenerateConsistentRanges",
 			Reader:      excludeRangesStore,
 			Transformer: transformer.MakeDoFunc(GenerateConsistentRanges, workers),
-			Writer:      transformer.TruncateBeforeWriting(consistentRangesStore),
+			Writer:      store.NewTruncatingWriter(consistentRangesStore),
 		},
 	}
 }
@@ -80,7 +82,7 @@ func EncodeIntervalKey(decodedKey *IntervalKey) []byte {
 		decodedKey.LastSequenceNumber)
 }
 
-func AvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func AvailabilityIntervals(inputChan, outputChan chan *store.Record) {
 	writeRecord := func(firstKey, lastKey *TraceKey, firstTrace, lastTrace []byte) {
 		firstTraceDecoded := Trace{}
 		if err := proto.Unmarshal(firstTrace, &firstTraceDecoded); err != nil {
@@ -97,7 +99,7 @@ func AvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord
 			FirstSequenceNumber:  firstKey.SequenceNumber,
 			LastSequenceNumber:   lastKey.SequenceNumber,
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   EncodeIntervalKey(&intervalKey),
 			Value: key.EncodeOrDie(*firstTraceDecoded.TraceCreationTimestamp, *lastTraceDecoded.TraceCreationTimestamp),
 		}
@@ -133,7 +135,7 @@ func AvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord
 	}
 }
 
-func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) {
 	writeRecord := func(firstKey, lastKey *IntervalKey, firstInterval, lastInterval []byte) {
 		var firstIntervalStart, firstIntervalEnd, lastIntervalStart, lastIntervalEnd int64
 		key.DecodeOrDie(firstInterval, &firstIntervalStart, &firstIntervalEnd)
@@ -145,7 +147,7 @@ func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.Le
 			FirstSequenceNumber:  firstKey.FirstSequenceNumber,
 			LastSequenceNumber:   lastKey.LastSequenceNumber,
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   EncodeIntervalKey(&intervalKey),
 			Value: key.EncodeOrDie(firstIntervalStart, lastIntervalEnd),
 		}
@@ -179,14 +181,14 @@ func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *transformer.Le
 	}
 }
 
-func AvailabilityReducer(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func AvailabilityReducer(inputChan, outputChan chan *store.Record) {
 	writeRecord := func(currentNode []byte, points [][]int64) {
 		if currentNode != nil {
 			value, err := json.Marshal(points)
 			if err != nil {
 				log.Fatalf("Error marshaling JSON: %v", err)
 			}
-			outputChan <- &transformer.LevelDbRecord{
+			outputChan <- &store.Record{
 				Key:   key.EncodeOrDie(currentNode),
 				Value: value,
 			}
@@ -233,7 +235,7 @@ func (store *AvailabilityJsonStore) BeginWriting() error {
 	return nil
 }
 
-func (store *AvailabilityJsonStore) WriteRecord(record *transformer.LevelDbRecord) error {
+func (store *AvailabilityJsonStore) WriteRecord(record *store.Record) error {
 	var nodeId string
 	key.DecodeOrDie(record.Key, &nodeId)
 	if store.first {
@@ -256,7 +258,7 @@ func (store *AvailabilityJsonStore) EndWriting() error {
 	return nil
 }
 
-func GenerateExcludedRanges(record *transformer.LevelDbRecord) *transformer.LevelDbRecord {
+func GenerateExcludedRanges(record *store.Record) *store.Record {
 	intervalKey := DecodeIntervalKey(record.Key)
 	newKey := TraceKey{
 		NodeId:               intervalKey.NodeId,
@@ -270,13 +272,13 @@ func GenerateExcludedRanges(record *transformer.LevelDbRecord) *transformer.Leve
 		SessionId:            intervalKey.SessionId,
 		SequenceNumber:       intervalKey.LastSequenceNumber,
 	}
-	return &transformer.LevelDbRecord{
+	return &store.Record{
 		Key:   key.EncodeOrDie(&newKey),
 		Value: key.EncodeOrDie(&newValue),
 	}
 }
 
-func GenerateConsistentRanges(record *transformer.LevelDbRecord, outputChan chan *transformer.LevelDbRecord) {
+func GenerateConsistentRanges(record *store.Record, outputChan chan *store.Record) {
 	var intervalStartKey TraceKey
 	key.DecodeOrDie(record.Key, &intervalStartKey)
 	if intervalStartKey.SequenceNumber != 0 {

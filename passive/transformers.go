@@ -3,9 +3,11 @@ package passive
 import (
 	"bytes"
 	"fmt"
+	"log"
+
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"log"
+	"github.com/sburnett/transformer/store"
 )
 
 type TraceKey struct {
@@ -105,7 +107,7 @@ func (sessionKey *SessionKey) Equal(otherSession *SessionKey) bool {
 	return true
 }
 
-func TraceKeyRangesPipeline(newTraceKeysStore transformer.StoreReader, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull) []transformer.PipelineStage {
+func TraceKeyRangesPipeline(newTraceKeysStore store.Reader, traceKeyRangesStore, consolidatedTraceKeyRangesStore store.ReadingDeleter) []transformer.PipelineStage {
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "CalculateTraceKeyRanges",
@@ -117,17 +119,17 @@ func TraceKeyRangesPipeline(newTraceKeysStore transformer.StoreReader, traceKeyR
 			Name:        "ConsolidateTraceKeyRanges",
 			Transformer: transformer.TransformFunc(ConsolidateTraceKeyRanges),
 			Reader:      traceKeyRangesStore,
-			Writer:      transformer.TruncateBeforeWriting(consolidatedTraceKeyRangesStore),
+			Writer:      store.NewTruncatingWriter(consolidatedTraceKeyRangesStore),
 		},
 		transformer.PipelineStage{
 			Name:   "CopyTraceKeyRanges",
 			Reader: consolidatedTraceKeyRangesStore,
-			Writer: transformer.TruncateBeforeWriting(traceKeyRangesStore),
+			Writer: store.NewTruncatingWriter(traceKeyRangesStore),
 		},
 	}
 }
 
-func CalculateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func CalculateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	var firstKey, lastKey, expectedTraceKey *TraceKey
 	for record := range inputChan {
 		var traceKey TraceKey
@@ -141,7 +143,7 @@ func CalculateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbReco
 
 		if !traceKey.Equal(expectedTraceKey) {
 			if firstKey != nil {
-				outputChan <- &transformer.LevelDbRecord{
+				outputChan <- &store.Record{
 					Key:   key.EncodeOrDie(firstKey),
 					Value: key.EncodeOrDie(lastKey),
 				}
@@ -152,14 +154,14 @@ func CalculateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbReco
 		expectedTraceKey = &expectedNextTraceKey
 	}
 	if firstKey != nil {
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(firstKey),
 			Value: key.EncodeOrDie(lastKey),
 		}
 	}
 }
 
-func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func ConsolidateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	var firstBeginKey, lastEndKey *TraceKey
 	var currentSessionKey *SessionKey
 	for record := range inputChan {
@@ -170,7 +172,7 @@ func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRe
 
 		if !sessionKey.Equal(currentSessionKey) || beginKey.SequenceNumber != lastEndKey.SequenceNumber+1 {
 			if firstBeginKey != nil && lastEndKey != nil {
-				outputChan <- &transformer.LevelDbRecord{
+				outputChan <- &store.Record{
 					Key:   key.EncodeOrDie(firstBeginKey),
 					Value: key.EncodeOrDie(lastEndKey),
 				}
@@ -181,21 +183,21 @@ func ConsolidateTraceKeyRanges(inputChan, outputChan chan *transformer.LevelDbRe
 		lastEndKey = &endKey
 	}
 	if firstBeginKey != nil && lastEndKey != nil {
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(firstBeginKey),
 			Value: key.EncodeOrDie(lastEndKey),
 		}
 	}
 }
 
-func Sessions(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func Sessions(inputChan, outputChan chan *store.Record) {
 	var currentSession *SessionKey
 	for record := range inputChan {
 		var session SessionKey
 		key.DecodeOrDie(record.Key, &session)
 		if !session.Equal(currentSession) {
 			if currentSession != nil {
-				outputChan <- &transformer.LevelDbRecord{
+				outputChan <- &store.Record{
 					Key: key.EncodeOrDie(currentSession),
 				}
 			}
@@ -203,22 +205,22 @@ func Sessions(inputChan, outputChan chan *transformer.LevelDbRecord) {
 		}
 	}
 	if currentSession != nil {
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key: key.EncodeOrDie(currentSession),
 		}
 	}
 }
 
-func SessionPipelineStage(inputStore transformer.StoreReader, sessionsStore transformer.StoreDeleter) transformer.PipelineStage {
+func SessionPipelineStage(inputStore store.Reader, sessionsStore store.Deleter) transformer.PipelineStage {
 	return transformer.PipelineStage{
 		Name:        "Sessions",
 		Transformer: transformer.TransformFunc(Sessions),
 		Reader:      inputStore,
-		Writer:      transformer.TruncateBeforeWriting(sessionsStore),
+		Writer:      store.NewTruncatingWriter(sessionsStore),
 	}
 }
 
-func PrintRecords(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func PrintRecords(inputChan, outputChan chan *store.Record) {
 	log.Printf("PRINT RECORDS IN DATASTORE")
 	for record := range inputChan {
 		log.Printf("%s: %s (%v: %v)", record.Key, record.Value, record.Key, record.Value)
@@ -226,7 +228,7 @@ func PrintRecords(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	log.Printf("DONE PRINTING")
 }
 
-func PrintRecordsStage(name string, store transformer.StoreReader) transformer.PipelineStage {
+func PrintRecordsStage(name string, store store.Reader) transformer.PipelineStage {
 	return transformer.PipelineStage{
 		Name:        fmt.Sprintf("Print %v", name),
 		Reader:      store,

@@ -3,13 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/sburnett/bismark-passive-server-go/passive"
-	"github.com/sburnett/cube"
-	"github.com/sburnett/transformer"
 	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/sburnett/bismark-passive-server-go/passive"
+	"github.com/sburnett/cube"
+	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/store"
 )
 
 func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.PipelineStage {
@@ -26,75 +28,75 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			log.Fatalf("Error opening JSON output: %v", err)
 		}
 		return passive.AvailabilityPipeline(
-			transformer.NewLevelDbStore(dbPath("traces")),
-			transformer.NewLevelDbStore(dbPath("availability-intervals")),
-			transformer.NewLevelDbStore(dbPath("availability-consolidated")),
-			transformer.NewLevelDbStore(dbPath("availability-nodes")),
+			store.NewLevelDbStore(dbPath("traces")),
+			store.NewLevelDbStore(dbPath("availability-intervals")),
+			store.NewLevelDbStore(dbPath("availability-consolidated")),
+			store.NewLevelDbStore(dbPath("availability-nodes")),
 			jsonHandle,
-			transformer.NewLevelDbStore(dbPath("availability-done")),
-			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
+			store.NewLevelDbStore(dbPath("availability-done")),
+			store.NewLevelDbStore(dbPath("consistent-ranges")),
 			time.Now().Unix(),
 			workers)
 	case "bytesperdevice":
 		return passive.BytesPerDevicePipeline(
-			transformer.NewLevelDbStore(dbPath("traces")),
-			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-sessions")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-address-table")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-table")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-packets")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-id-to-mac")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-flow-id-to-macs")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-unreduced")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-reduced-sessions")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice")),
+			store.NewLevelDbStore(dbPath("traces")),
+			store.NewLevelDbStore(dbPath("consistent-ranges")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-sessions")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-address-table")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-flow-table")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-packets")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-flow-id-to-mac")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-flow-id-to-macs")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-unreduced")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-reduced-sessions")),
+			store.NewLevelDbStore(dbPath("bytesperdevice")),
 			passive.NewBytesPerDevicePostgresStore(),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-trace-key-ranges")),
-			transformer.NewLevelDbStore(dbPath("bytesperdevice-consolidated-trace-key-ranges")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-trace-key-ranges")),
+			store.NewLevelDbStore(dbPath("bytesperdevice-consolidated-trace-key-ranges")),
 			workers)
 	case "bytesperdomain":
 		stores := passive.BytesPerDomainPipelineStores{
-			Traces:                     transformer.NewLevelDbStore(dbPath("traces")),
-			AvailabilityIntervals:      transformer.NewLevelDbStore(dbPath("consistent-ranges")),
-			TraceKeyRanges:             transformer.NewLevelDbStore(dbPath("bytesperdomain-trace-key-ranges")),
-			ConsolidatedTraceKeyRanges: transformer.NewLevelDbStore(dbPath("bytesperdomain-consolidated-trace-key-ranges")),
-			AddressIdTable:             transformer.NewLevelDbStore(dbPath("bytesperdomain-address-id-table")),
-			ARecordTable:               transformer.NewLevelDbStore(dbPath("bytesperdomain-a-record-table")),
-			CnameRecordTable:           transformer.NewLevelDbStore(dbPath("bytesperdomain-cname-record-table")),
-			FlowIpsTable:               transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-ips-table")),
-			AddressIpTable:             transformer.NewLevelDbStore(dbPath("bytesperdomain-address-ip-table")),
-			BytesPerTimestampSharded:   transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-timestamp-sharded")),
-			Whitelist:                  transformer.NewLevelDbStore(dbPath("bytesperdomain-whitelist")),
-			ARecordsWithMac:            transformer.NewLevelDbStore(dbPath("bytesperdomain-a-records-with-mac")),
-			CnameRecordsWithMac:        transformer.NewLevelDbStore(dbPath("bytesperdomain-cname-records-with-mac")),
-			AllDnsMappings:             transformer.NewLevelDbStore(dbPath("bytesperdomain-all-dns-mappings")),
-			AllWhitelistedMappings:     transformer.NewLevelDbStore(dbPath("bytesperdomain-all-whitelisted-mappings")),
-			FlowMacsTable:              transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-macs-table")),
-			FlowDomainsTable:           transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-domains-table")),
-			FlowDomainsGroupedTable:    transformer.NewLevelDbStore(dbPath("bytesperdomain-flow-domains-grouped-table")),
-			BytesPerDomainSharded:      transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-sharded")),
-			BytesPerDomainPerDevice:    transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-per-device")),
-			BytesPerDomain:             transformer.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain")),
+			Traces:                     store.NewLevelDbStore(dbPath("traces")),
+			AvailabilityIntervals:      store.NewLevelDbStore(dbPath("consistent-ranges")),
+			TraceKeyRanges:             store.NewLevelDbStore(dbPath("bytesperdomain-trace-key-ranges")),
+			ConsolidatedTraceKeyRanges: store.NewLevelDbStore(dbPath("bytesperdomain-consolidated-trace-key-ranges")),
+			AddressIdTable:             store.NewLevelDbStore(dbPath("bytesperdomain-address-id-table")),
+			ARecordTable:               store.NewLevelDbStore(dbPath("bytesperdomain-a-record-table")),
+			CnameRecordTable:           store.NewLevelDbStore(dbPath("bytesperdomain-cname-record-table")),
+			FlowIpsTable:               store.NewLevelDbStore(dbPath("bytesperdomain-flow-ips-table")),
+			AddressIpTable:             store.NewLevelDbStore(dbPath("bytesperdomain-address-ip-table")),
+			BytesPerTimestampSharded:   store.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-timestamp-sharded")),
+			Whitelist:                  store.NewLevelDbStore(dbPath("bytesperdomain-whitelist")),
+			ARecordsWithMac:            store.NewLevelDbStore(dbPath("bytesperdomain-a-records-with-mac")),
+			CnameRecordsWithMac:        store.NewLevelDbStore(dbPath("bytesperdomain-cname-records-with-mac")),
+			AllDnsMappings:             store.NewLevelDbStore(dbPath("bytesperdomain-all-dns-mappings")),
+			AllWhitelistedMappings:     store.NewLevelDbStore(dbPath("bytesperdomain-all-whitelisted-mappings")),
+			FlowMacsTable:              store.NewLevelDbStore(dbPath("bytesperdomain-flow-macs-table")),
+			FlowDomainsTable:           store.NewLevelDbStore(dbPath("bytesperdomain-flow-domains-table")),
+			FlowDomainsGroupedTable:    store.NewLevelDbStore(dbPath("bytesperdomain-flow-domains-grouped-table")),
+			BytesPerDomainSharded:      store.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-sharded")),
+			BytesPerDomainPerDevice:    store.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain-per-device")),
+			BytesPerDomain:             store.NewLevelDbStore(dbPath("bytesperdomain-bytes-per-domain")),
 			BytesPerDomainPostgres:     passive.NewBytesPerDomainPostgresStore(),
-			Sessions:                   transformer.NewLevelDbStore(dbPath("bytesperdomain-sessions")),
+			Sessions:                   store.NewLevelDbStore(dbPath("bytesperdomain-sessions")),
 		}
 		return passive.BytesPerDomainPipeline(&stores, workers)
 	case "bytesperminute":
 		return passive.BytesPerMinutePipeline(
-			transformer.NewLevelDbStore(dbPath("traces")),
-			transformer.NewLevelDbStore(dbPath("bytesperminute-mapped")),
-			transformer.NewLevelDbStore(dbPath("bytesperminute")),
-			transformer.NewLevelDbStore(dbPath("bytesperhour")),
+			store.NewLevelDbStore(dbPath("traces")),
+			store.NewLevelDbStore(dbPath("bytesperminute-mapped")),
+			store.NewLevelDbStore(dbPath("bytesperminute")),
+			store.NewLevelDbStore(dbPath("bytesperhour")),
 			passive.NewBytesPerHourPostgresStore(),
-			transformer.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges")),
-			transformer.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges")),
+			store.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges")),
+			store.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges")),
 			workers)
 	case "filternode":
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
 		flagset.Parse(flag.Args()[2:])
-		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
-		filteredStore := transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s", *nodeId)))
+		tracesStore := store.NewLevelDbStore(dbPath("traces"))
+		filteredStore := store.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s", *nodeId)))
 		return []transformer.PipelineStage{
 			transformer.PipelineStage{
 				Name:   "FilterNode",
@@ -119,30 +121,30 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		return passive.FilterSessionsPipeline(
 			sessionStartTime.Unix(),
 			sessionEndTime.Unix(),
-			transformer.NewLevelDbStore(dbPath("traces")),
-			transformer.NewLevelDbStore(dbPath("availability-done")),
-			transformer.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s-%s", *sessionStartDate, *sessionEndDate))))
+			store.NewLevelDbStore(dbPath("traces")),
+			store.NewLevelDbStore(dbPath("availability-done")),
+			store.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s-%s", *sessionStartDate, *sessionEndDate))))
 	case "index":
-		tarnamesStore := transformer.NewLevelDbStore(dbPath("tarnames"))
-		tarnamesIndexedStore := transformer.NewLevelDbStore(dbPath("tarnames-indexed"))
-		tracesStore := transformer.NewLevelDbStore(dbPath("traces"))
+		tarnamesStore := store.NewLevelDbStore(dbPath("tarnames"))
+		tarnamesIndexedStore := store.NewLevelDbStore(dbPath("tarnames-indexed"))
+		tracesStore := store.NewLevelDbStore(dbPath("traces"))
 		return []transformer.PipelineStage{
 			transformer.PipelineStage{
 				Name:        "ParseTraces",
 				Transformer: transformer.MakeMultipleOutputsGroupDoFunc(passive.IndexTarballs, 2, workers),
-				Reader:      transformer.NewDemuxStoreReader(tarnamesStore, tarnamesIndexedStore),
-				Writer:      transformer.NewMuxedStoreWriter(tracesStore, tarnamesIndexedStore),
+				Reader:      store.NewDemuxingReader(tarnamesStore, tarnamesIndexedStore),
+				Writer:      store.NewMuxingWriter(tracesStore, tarnamesIndexedStore),
 			},
 		}
 	case "lookupsperdevice":
 		return passive.LookupsPerDevicePipeline(
-			transformer.NewLevelDbStore(dbPath("traces")),
-			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
-			transformer.NewLevelDbStore(dbPath("bytesperdomain-address-id-table")),
-			transformer.NewLevelDbStore(dbPath("lookupsperdevice-address-id-to-domain")),
-			transformer.NewLevelDbStore(dbPath("lookupsperdevice-sharded")),
-			transformer.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device")),
-			transformer.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device-per-hour")),
+			store.NewLevelDbStore(dbPath("traces")),
+			store.NewLevelDbStore(dbPath("consistent-ranges")),
+			store.NewLevelDbStore(dbPath("bytesperdomain-address-id-table")),
+			store.NewLevelDbStore(dbPath("lookupsperdevice-address-id-to-domain")),
+			store.NewLevelDbStore(dbPath("lookupsperdevice-sharded")),
+			store.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device")),
+			store.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device-per-hour")),
 			workers)
 	case "print":
 		flagset := flag.NewFlagSet("print", flag.ExitOnError)
@@ -153,7 +155,7 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		if len(*storePath) == 0 {
 			panic(fmt.Errorf("Invalid leveldb name. Must specify --leveldb."))
 		}
-		store := transformer.NewLevelDbStore(dbPath(*storePath))
+		store := store.NewLevelDbStore(dbPath(*storePath))
 		return passive.RecordPrinterPipeline(store, *keyFormat, *valueFormat)
 	case "statistics":
 		flagset := flag.NewFlagSet("statistics", flag.ExitOnError)
@@ -164,15 +166,15 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			log.Fatalf("Error opening JSON output: %v", err)
 		}
 		return passive.AggregateStatisticsPipeline(
-			transformer.NewLevelDbStore(dbPath("traces")),
-			transformer.NewLevelDbStore(dbPath("consistent-ranges")),
-			transformer.NewLevelDbStore(dbPath("statistics-trace-aggregates")),
-			transformer.NewLevelDbStore(dbPath("statistics-session-aggregates")),
-			transformer.NewLevelDbStore(dbPath("statistics-node-aggregates")),
+			store.NewLevelDbStore(dbPath("traces")),
+			store.NewLevelDbStore(dbPath("consistent-ranges")),
+			store.NewLevelDbStore(dbPath("statistics-trace-aggregates")),
+			store.NewLevelDbStore(dbPath("statistics-session-aggregates")),
+			store.NewLevelDbStore(dbPath("statistics-node-aggregates")),
 			jsonHandle,
-			transformer.NewLevelDbStore(dbPath("statistics-sessions")),
-			transformer.NewLevelDbStore(dbPath("statistics-trace-key-ranges")),
-			transformer.NewLevelDbStore(dbPath("statistics-consolidated-trace-key-ranges")),
+			store.NewLevelDbStore(dbPath("statistics-sessions")),
+			store.NewLevelDbStore(dbPath("statistics-trace-key-ranges")),
+			store.NewLevelDbStore(dbPath("statistics-consolidated-trace-key-ranges")),
 			workers)
 	default:
 		flag.Usage()

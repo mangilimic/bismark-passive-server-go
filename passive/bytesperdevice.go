@@ -1,13 +1,15 @@
 package passive
 
 import (
-	"code.google.com/p/goprotobuf/proto"
 	"database/sql"
 	"fmt"
+	"time"
+
+	"code.google.com/p/goprotobuf/proto"
 	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"time"
+	"github.com/sburnett/transformer/store"
 )
 
 type FlowTimestamp struct {
@@ -15,37 +17,37 @@ type FlowTimestamp struct {
 	timestamp int64
 }
 
-func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.StoreSeeker, sessionsStore, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore, bytesPerDeviceUnreducedStore transformer.DatastoreFull, bytesPerDeviceSessionStore, bytesPerDeviceStore transformer.Datastore, bytesPerDevicePostgresStore transformer.StoreWriter, traceKeyRangesStore, consolidatedTraceKeyRangesStore transformer.DatastoreFull, workers int) []transformer.PipelineStage {
-	newTracesStore := transformer.ReadExcludingRanges(transformer.ReadIncludingRanges(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
+func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore store.Seeker, sessionsStore store.ReadingDeleter, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore, bytesPerDeviceUnreducedStore store.SeekingWriter, bytesPerDeviceSessionStore, bytesPerDeviceStore store.ReadingWriter, bytesPerDevicePostgresStore store.Writer, traceKeyRangesStore, consolidatedTraceKeyRangesStore store.ReadingDeleter, workers int) []transformer.PipelineStage {
+	newTracesStore := store.NewRangeExcludingReader(store.NewRangeIncludingReader(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerDeviceMapper",
 			Reader:      newTracesStore,
 			Transformer: transformer.MakeMultipleOutputsDoFunc(BytesPerDeviceMapper, 3, workers),
-			Writer:      transformer.NewMuxedStoreWriter(addressTableStore, flowTableStore, packetsStore),
+			Writer:      store.NewMuxingWriter(addressTableStore, flowTableStore, packetsStore),
 		},
 		SessionPipelineStage(newTracesStore, sessionsStore),
 		transformer.PipelineStage{
 			Name:        "JoinMacAndFlowId",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(addressTableStore, flowTableStore), sessionsStore),
+			Reader:      store.NewPrefixIncludingReader(store.NewDemuxingSeeker(addressTableStore, flowTableStore), sessionsStore),
 			Transformer: transformer.TransformFunc(JoinMacAndFlowId),
 			Writer:      flowIdToMacStore,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenMacAddresses",
-			Reader:      transformer.ReadIncludingPrefixes(flowIdToMacStore, sessionsStore),
+			Reader:      store.NewPrefixIncludingReader(flowIdToMacStore, sessionsStore),
 			Transformer: transformer.TransformFunc(FlattenMacAddresses),
 			Writer:      flowIdToMacsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinMacAndSizes",
-			Reader:      transformer.ReadIncludingPrefixes(transformer.NewDemuxStoreSeeker(flowIdToMacsStore, packetsStore), sessionsStore),
+			Reader:      store.NewPrefixIncludingReader(store.NewDemuxingSeeker(flowIdToMacsStore, packetsStore), sessionsStore),
 			Transformer: transformer.TransformFunc(JoinMacAndSizes),
 			Writer:      bytesPerDeviceUnreducedStore,
 		},
 		transformer.PipelineStage{
 			Name:        "ReduceBytesPerDeviceSession",
-			Reader:      transformer.ReadIncludingPrefixes(bytesPerDeviceUnreducedStore, sessionsStore),
+			Reader:      store.NewPrefixIncludingReader(bytesPerDeviceUnreducedStore, sessionsStore),
 			Transformer: transformer.TransformFunc(ReduceBytesPerDeviceSession),
 			Writer:      bytesPerDeviceSessionStore,
 		},
@@ -63,19 +65,19 @@ func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore transformer.
 	}, TraceKeyRangesPipeline(newTracesStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
-func MapTraceToAddressTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
+func MapTraceToAddressTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	for _, entry := range trace.AddressTableEntry {
 		if entry.MacAddress == nil || entry.IpAddress == nil {
 			continue
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.IpAddress, traceKey.SequenceNumber),
 			Value: key.EncodeOrDie(*entry.MacAddress),
 		}
 	}
 }
 
-func MapTraceToFlowTable(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
+func MapTraceToFlowTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	flowIds := make(map[string][]int32)
 	for _, entry := range trace.FlowTableEntry {
 		if entry.FlowId == nil {
@@ -89,14 +91,14 @@ func MapTraceToFlowTable(traceKey *TraceKey, trace *Trace, outputChan chan *tran
 		}
 	}
 	for ipAddress, ids := range flowIds {
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, ipAddress, traceKey.SequenceNumber),
 			Value: key.EncodeOrDie(ids),
 		}
 	}
 }
 
-func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan chan *transformer.LevelDbRecord) {
+func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	buckets := make(map[int32]map[int64]int64)
 	for _, packetSeriesEntry := range trace.PacketSeries {
 		if packetSeriesEntry.FlowId == nil || packetSeriesEntry.TimestampMicroseconds == nil || packetSeriesEntry.Size == nil {
@@ -118,14 +120,14 @@ func MapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan ch
 			sizes[idx] = size
 			idx++
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber),
 			Value: key.EncodeOrDie(timestamps, sizes),
 		}
 	}
 }
 
-func BytesPerDeviceMapper(record *transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
+func BytesPerDeviceMapper(record *store.Record, outputChans ...chan *store.Record) {
 	var traceKey TraceKey
 	key.DecodeOrDie(record.Key, &traceKey)
 	var trace Trace
@@ -138,7 +140,7 @@ func BytesPerDeviceMapper(record *transformer.LevelDbRecord, outputChans ...chan
 	MapTraceToBytesPerTimestamp(&traceKey, &trace, outputChans[2])
 }
 
-func JoinMacAndFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func JoinMacAndFlowId(inputChan, outputChan chan *store.Record) {
 	var session SessionKey
 	var ipAddress []byte
 	grouper := transformer.GroupRecords(inputChan, &session, &ipAddress)
@@ -158,7 +160,7 @@ func JoinMacAndFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
 			var flowIds []int32
 			key.DecodeOrDie(record.Value, &flowIds)
 			for _, flowId := range flowIds {
-				outputChan <- &transformer.LevelDbRecord{
+				outputChan <- &store.Record{
 					Key: key.Join(key.EncodeOrDie(&session, flowId, sequenceNumber), currentMacAddress),
 				}
 			}
@@ -166,7 +168,7 @@ func JoinMacAndFlowId(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	}
 }
 
-func FlattenMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func FlattenMacAddresses(inputChan, outputChan chan *store.Record) {
 	var session SessionKey
 	var flowId, sequenceNumber int32
 	grouper := transformer.GroupRecords(inputChan, &session, &flowId, &sequenceNumber)
@@ -178,14 +180,14 @@ func FlattenMacAddresses(inputChan, outputChan chan *transformer.LevelDbRecord) 
 			key.DecodeOrDie(record.Key, &macAddress)
 			macAddresses = append(macAddresses, macAddress)
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(&session, flowId, sequenceNumber),
 			Value: key.EncodeOrDie(macAddresses),
 		}
 	}
 }
 
-func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func JoinMacAndSizes(inputChan, outputChan chan *store.Record) {
 	var session SessionKey
 	var flowId int32
 	grouper := transformer.GroupRecords(inputChan, &session, &flowId)
@@ -211,7 +213,7 @@ func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
 
 			for _, currentMacAddress := range currentMacAddresses {
 				for idx, timestamp := range timestamps {
-					outputChan <- &transformer.LevelDbRecord{
+					outputChan <- &store.Record{
 						Key:   key.EncodeOrDie(&session, currentMacAddress, timestamp, flowId, sequenceNumber),
 						Value: key.EncodeOrDie(sizes[idx]),
 					}
@@ -221,7 +223,7 @@ func JoinMacAndSizes(inputChan, outputChan chan *transformer.LevelDbRecord) {
 	}
 }
 
-func ReduceBytesPerDeviceSession(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func ReduceBytesPerDeviceSession(inputChan, outputChan chan *store.Record) {
 	var session SessionKey
 	var macAddress []byte
 	var timestamp int64
@@ -234,14 +236,14 @@ func ReduceBytesPerDeviceSession(inputChan, outputChan chan *transformer.LevelDb
 			key.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(session.NodeId, macAddress, timestamp, session.AnonymizationContext, session.SessionId),
 			Value: key.EncodeOrDie(totalSize),
 		}
 	}
 }
 
-func ReduceBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func ReduceBytesPerDevice(inputChan, outputChan chan *store.Record) {
 	var nodeId, macAddress []byte
 	var timestamp int64
 	grouper := transformer.GroupRecords(inputChan, &nodeId, &macAddress, &timestamp)
@@ -253,7 +255,7 @@ func ReduceBytesPerDevice(inputChan, outputChan chan *transformer.LevelDbRecord)
 			key.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
-		outputChan <- &transformer.LevelDbRecord{
+		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(nodeId, macAddress, timestamp),
 			Value: key.EncodeOrDie(totalSize),
 		}
@@ -302,7 +304,7 @@ func (store *BytesPerDevicePostgresStore) BeginWriting() error {
 	return nil
 }
 
-func (store *BytesPerDevicePostgresStore) WriteRecord(record *transformer.LevelDbRecord) error {
+func (store *BytesPerDevicePostgresStore) WriteRecord(record *store.Record) error {
 	var nodeId, macAddress []byte
 	var timestamp, size int64
 

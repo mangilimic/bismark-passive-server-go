@@ -2,13 +2,15 @@ package passive
 
 import (
 	"fmt"
-	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"reflect"
 	"strings"
+
+	"github.com/sburnett/transformer"
+	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
-func RecordPrinterPipeline(store transformer.StoreReader, keyFormat, valueFormat string) []transformer.PipelineStage {
+func RecordPrinterPipeline(store store.Reader, keyFormat, valueFormat string) []transformer.PipelineStage {
 	printer, err := NewRecordPrinter(keyFormat, valueFormat)
 	if err != nil {
 		panic(err)
@@ -116,7 +118,7 @@ func NewRecordPrinter(keyFormat, valueFormat string) (*RecordPrinter, error) {
 	return &printer, nil
 }
 
-func (printer *RecordPrinter) Do(inputChan, outputChan chan *transformer.LevelDbRecord) {
+func (printer *RecordPrinter) Do(inputChan, outputChan chan *store.Record) {
 	for record := range inputChan {
 		if printer.keys != nil {
 			remainder := key.DecodeOrDie(record.Key, printer.keys...)

@@ -2,17 +2,18 @@ package passive
 
 import (
 	"archive/tar"
-	"code.google.com/p/goprotobuf/proto"
 	"compress/gzip"
 	"expvar"
 	"fmt"
-	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+
+	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/transformer/store"
 )
 
 var currentTar *expvar.String
@@ -40,7 +41,7 @@ func traceKey(trace *Trace) []byte {
 		*trace.SequenceNumber)
 }
 
-func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bool {
+func indexTarball(tarPath string, tracesChan chan *store.Record) bool {
 	currentTar.Set(tarPath)
 	handle, err := os.Open(tarPath)
 	if err != nil {
@@ -111,7 +112,7 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 		if err != nil {
 			panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 		}
-		tracesChan <- &transformer.LevelDbRecord{
+		tracesChan <- &store.Record{
 			Key:   key,
 			Value: value,
 		}
@@ -121,7 +122,7 @@ func indexTarball(tarPath string, tracesChan chan *transformer.LevelDbRecord) bo
 	return true
 }
 
-func IndexTarballs(inputRecords []*transformer.LevelDbRecord, outputChans ...chan *transformer.LevelDbRecord) {
+func IndexTarballs(inputRecords []*store.Record, outputChans ...chan *store.Record) {
 	if len(inputRecords) != 1 {
 		tarsSkipped.Add(1)
 		return
@@ -136,7 +137,7 @@ func IndexTarballs(inputRecords []*transformer.LevelDbRecord, outputChans ...cha
 	var tarPath string
 	key.DecodeOrDie(inputRecords[0].Key, &tarPath)
 	if indexTarball(tarPath, tracesChan) {
-		tarnamesChan <- &transformer.LevelDbRecord{
+		tarnamesChan <- &store.Record{
 			Key: key.EncodeOrDie(tarPath),
 		}
 	}

@@ -1,17 +1,19 @@
 package passive
 
 import (
-	"code.google.com/p/goprotobuf/proto"
 	"fmt"
+	"reflect"
+
+	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
-	"reflect"
+	"github.com/sburnett/transformer/store"
 )
 
-func runBytesPerDomainPipeline(consistentRanges []*transformer.LevelDbRecord, allTraces ...map[string]Trace) {
+func runBytesPerDomainPipeline(consistentRanges []*store.Record, allTraces ...map[string]Trace) {
 	var stores BytesPerDomainPipelineStores
 
-	availabilityIntervalsStore := transformer.SliceStore{}
+	availabilityIntervalsStore := store.SliceStore{}
 	stores.AvailabilityIntervals = &availabilityIntervalsStore
 	availabilityIntervalsStore.BeginWriting()
 	for _, record := range consistentRanges {
@@ -19,17 +21,17 @@ func runBytesPerDomainPipeline(consistentRanges []*transformer.LevelDbRecord, al
 	}
 	availabilityIntervalsStore.EndWriting()
 
-	tracesStore := transformer.SliceStore{}
+	tracesStore := store.SliceStore{}
 	stores.Traces = &tracesStore
 
-	bytesPerDomainStore := transformer.SliceStore{}
+	bytesPerDomainStore := store.SliceStore{}
 	stores.BytesPerDomain = &bytesPerDomainStore
-	bytesPerDomainPerDeviceStore := transformer.SliceStore{}
+	bytesPerDomainPerDeviceStore := store.SliceStore{}
 	stores.BytesPerDomainPerDevice = &bytesPerDomainPerDeviceStore
 
 	// Fill in the remaining unitialized fields with new SliceStores.
 	storesValue := reflect.ValueOf(&stores).Elem()
-	modelStore := transformer.SliceStore{}
+	modelStore := store.SliceStore{}
 	for i := 0; i < storesValue.NumField(); i++ {
 		field := storesValue.Field(i)
 		if !field.IsNil() {
@@ -45,7 +47,7 @@ func runBytesPerDomainPipeline(consistentRanges []*transformer.LevelDbRecord, al
 			if err != nil {
 				panic(fmt.Errorf("Error encoding protocol buffer: %v", err))
 			}
-			tracesStore.WriteRecord(&transformer.LevelDbRecord{Key: []byte(encodedKey), Value: encodedTrace})
+			tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 		}
 		tracesStore.EndWriting()
 
@@ -90,7 +92,7 @@ func runBytesPerDomainPipeline(consistentRanges []*transformer.LevelDbRecord, al
 }
 
 func ExampleBytesPerDomain_empty() {
-	consistentRanges := []*transformer.LevelDbRecord{}
+	consistentRanges := []*store.Record{}
 	records := map[string]Trace{}
 
 	runBytesPerDomainPipeline(consistentRanges, records)
@@ -139,8 +141,8 @@ func ExampleBytesPerDomain_single() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -202,8 +204,8 @@ func ExampleBytesPerDomain_nonZeroConstants() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -280,8 +282,8 @@ func ExampleBytesPerDomain_domains() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -350,8 +352,8 @@ func ExampleBytesPerDomain_domainsDoNotDoubleCount() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -420,8 +422,8 @@ func ExampleBytesPerDomain_singleCname() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -492,8 +494,8 @@ func ExampleBytesPerDomain_singleCnameAnonymizedCname() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -562,8 +564,8 @@ func ExampleBytesPerDomain_singleCnameAnonymizedDomain() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -662,8 +664,8 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionAFirst() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -774,8 +776,8 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionALonger() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -884,8 +886,8 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionAOverlap() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -986,8 +988,8 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameFirst() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -1098,8 +1100,8 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameLonger() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -1219,8 +1221,8 @@ func ExampleBytesPerDomain_singleCnameLeaseIntersectionCnameOverlap() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -1284,8 +1286,8 @@ func ExampleBytesPerDomain_multiplePackets() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -1353,8 +1355,8 @@ func ExampleBytesPerDomain_multipleTraces() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
@@ -1445,8 +1447,8 @@ func ExampleBytesPerDomain_multipleHours() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
@@ -1534,8 +1536,8 @@ func ExampleBytesPerDomain_multipleFlows() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
@@ -1608,8 +1610,8 @@ func ExampleBytesPerDomain_expireDnsResponses() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -1689,8 +1691,8 @@ func ExampleBytesPerDomain_isolateDevices() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
@@ -1759,12 +1761,12 @@ func ExampleBytesPerDomain_isolateSessions() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
-		&transformer.LevelDbRecord{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(1), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(1), int32(0)),
 		},
@@ -1861,12 +1863,12 @@ func ExampleBytesPerDomain_isolateNodes() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
-		&transformer.LevelDbRecord{
+		&store.Record{
 			Key:   key.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
 		},
@@ -1937,8 +1939,8 @@ func ExampleBytesPerDomain_multipleRuns() {
 			},
 		},
 	}
-	consistentRanges := []*transformer.LevelDbRecord{
-		&transformer.LevelDbRecord{
+	consistentRanges := []*store.Record{
+		&store.Record{
 			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
