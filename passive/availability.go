@@ -18,42 +18,42 @@ func AvailabilityPipeline(tracesStore store.Seeker, intervalsStore store.Reading
 		transformer.PipelineStage{
 			Name:        "AvailabilityIntervals",
 			Reader:      store.NewRangeExcludingReader(tracesStore, excludeRangesStore),
-			Transformer: transformer.TransformFunc(AvailabilityIntervals),
+			Transformer: transformer.TransformFunc(availabilityIntervals),
 			Writer:      intervalsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "ConsolidateAvailabilityIntervals",
 			Reader:      intervalsStore,
-			Transformer: transformer.TransformFunc(ConsolidateAvailabilityIntervals),
+			Transformer: transformer.TransformFunc(consolidateAvailabilityIntervals),
 			Writer:      store.NewTruncatingWriter(consolidatedStore),
 		},
 		transformer.PipelineStage{
 			Name:        "AvailabilityReducer",
 			Reader:      consolidatedStore,
-			Transformer: transformer.TransformFunc(AvailabilityReducer),
+			Transformer: transformer.TransformFunc(availabilityReducer),
 			Writer:      store.NewTruncatingWriter(nodesStore),
 		},
 		transformer.PipelineStage{
 			Name:   "AvailabilityJson",
 			Reader: nodesStore,
-			Writer: &AvailabilityJsonStore{writer: jsonWriter, timestamp: timestamp},
+			Writer: &availabilityJsonStore{writer: jsonWriter, timestamp: timestamp},
 		},
 		transformer.PipelineStage{
 			Name:        "GenerateExcludedRanges",
 			Reader:      consolidatedStore,
-			Transformer: transformer.MakeMapFunc(GenerateExcludedRanges, workers),
+			Transformer: transformer.MakeMapFunc(generateExcludedRanges, workers),
 			Writer:      store.NewTruncatingWriter(excludeRangesStore),
 		},
 		transformer.PipelineStage{
 			Name:        "GenerateConsistentRanges",
 			Reader:      excludeRangesStore,
-			Transformer: transformer.MakeDoFunc(GenerateConsistentRanges, workers),
+			Transformer: transformer.MakeDoFunc(generateConsistentRanges, workers),
 			Writer:      store.NewTruncatingWriter(consistentRangesStore),
 		},
 	}
 }
 
-type IntervalKey struct {
+type intervalKey struct {
 	NodeId               []byte
 	AnonymizationContext []byte
 	SessionId            int64
@@ -61,8 +61,8 @@ type IntervalKey struct {
 	LastSequenceNumber   int32
 }
 
-func DecodeIntervalKey(encodedKey []byte) *IntervalKey {
-	decodedKey := new(IntervalKey)
+func DecodeIntervalKey(encodedKey []byte) *intervalKey {
+	decodedKey := new(intervalKey)
 	key.DecodeOrDie(
 		encodedKey,
 		&decodedKey.NodeId,
@@ -73,7 +73,7 @@ func DecodeIntervalKey(encodedKey []byte) *IntervalKey {
 	return decodedKey
 }
 
-func EncodeIntervalKey(decodedKey *IntervalKey) []byte {
+func EncodeIntervalKey(decodedKey *intervalKey) []byte {
 	return key.EncodeOrDie(
 		decodedKey.NodeId,
 		decodedKey.AnonymizationContext,
@@ -82,7 +82,7 @@ func EncodeIntervalKey(decodedKey *IntervalKey) []byte {
 		decodedKey.LastSequenceNumber)
 }
 
-func AvailabilityIntervals(inputChan, outputChan chan *store.Record) {
+func availabilityIntervals(inputChan, outputChan chan *store.Record) {
 	writeRecord := func(firstKey, lastKey *TraceKey, firstTrace, lastTrace []byte) {
 		firstTraceDecoded := Trace{}
 		if err := proto.Unmarshal(firstTrace, &firstTraceDecoded); err != nil {
@@ -92,7 +92,7 @@ func AvailabilityIntervals(inputChan, outputChan chan *store.Record) {
 		if err := proto.Unmarshal(lastTrace, &lastTraceDecoded); err != nil {
 			log.Fatalf("Error ummarshaling protocol buffer: %v", err)
 		}
-		intervalKey := IntervalKey{
+		intervalKey := intervalKey{
 			NodeId:               firstKey.NodeId,
 			AnonymizationContext: firstKey.AnonymizationContext,
 			SessionId:            firstKey.SessionId,
@@ -135,12 +135,12 @@ func AvailabilityIntervals(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) {
-	writeRecord := func(firstKey, lastKey *IntervalKey, firstInterval, lastInterval []byte) {
+func consolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) {
+	writeRecord := func(firstKey, lastKey *intervalKey, firstInterval, lastInterval []byte) {
 		var firstIntervalStart, firstIntervalEnd, lastIntervalStart, lastIntervalEnd int64
 		key.DecodeOrDie(firstInterval, &firstIntervalStart, &firstIntervalEnd)
 		key.DecodeOrDie(lastInterval, &lastIntervalStart, &lastIntervalEnd)
-		intervalKey := IntervalKey{
+		intervalKey := intervalKey{
 			NodeId:               firstKey.NodeId,
 			AnonymizationContext: firstKey.AnonymizationContext,
 			SessionId:            firstKey.SessionId,
@@ -153,7 +153,7 @@ func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) 
 		}
 	}
 
-	var firstIntervalKey, lastIntervalKey *IntervalKey
+	var firstIntervalKey, lastIntervalKey *intervalKey
 	var firstInterval, lastInterval []byte
 	var previousSessionKeyEncoded []byte
 	for record := range inputChan {
@@ -181,7 +181,7 @@ func ConsolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) 
 	}
 }
 
-func AvailabilityReducer(inputChan, outputChan chan *store.Record) {
+func availabilityReducer(inputChan, outputChan chan *store.Record) {
 	writeRecord := func(currentNode []byte, points [][]int64) {
 		if currentNode != nil {
 			value, err := json.Marshal(points)
@@ -221,13 +221,13 @@ func AvailabilityReducer(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-type AvailabilityJsonStore struct {
+type availabilityJsonStore struct {
 	writer    io.Writer
 	timestamp int64
 	first     bool
 }
 
-func (store *AvailabilityJsonStore) BeginWriting() error {
+func (store *availabilityJsonStore) BeginWriting() error {
 	if _, err := fmt.Fprintf(store.writer, "[{"); err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ func (store *AvailabilityJsonStore) BeginWriting() error {
 	return nil
 }
 
-func (store *AvailabilityJsonStore) WriteRecord(record *store.Record) error {
+func (store *availabilityJsonStore) WriteRecord(record *store.Record) error {
 	var nodeId string
 	key.DecodeOrDie(record.Key, &nodeId)
 	if store.first {
@@ -251,14 +251,14 @@ func (store *AvailabilityJsonStore) WriteRecord(record *store.Record) error {
 	return nil
 }
 
-func (store *AvailabilityJsonStore) EndWriting() error {
+func (store *availabilityJsonStore) EndWriting() error {
 	if _, err := fmt.Fprintf(store.writer, "}, %d]", store.timestamp*1000); err != nil {
 		return err
 	}
 	return nil
 }
 
-func GenerateExcludedRanges(record *store.Record) *store.Record {
+func generateExcludedRanges(record *store.Record) *store.Record {
 	intervalKey := DecodeIntervalKey(record.Key)
 	newKey := TraceKey{
 		NodeId:               intervalKey.NodeId,
@@ -278,7 +278,7 @@ func GenerateExcludedRanges(record *store.Record) *store.Record {
 	}
 }
 
-func GenerateConsistentRanges(record *store.Record, outputChan chan *store.Record) {
+func generateConsistentRanges(record *store.Record, outputChan chan *store.Record) {
 	var intervalStartKey TraceKey
 	key.DecodeOrDie(record.Key, &intervalStartKey)
 	if intervalStartKey.SequenceNumber != 0 {

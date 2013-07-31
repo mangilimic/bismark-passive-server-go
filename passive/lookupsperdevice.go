@@ -15,31 +15,31 @@ func LookupsPerDevicePipeline(tracesStore, availabilityIntervalsStore, addressId
 		transformer.PipelineStage{
 			Name:        "LookupsPerDeviceMapper",
 			Reader:      consistentTracesStore,
-			Transformer: transformer.MakeDoFunc(LookupsPerDeviceMapper, workers),
+			Transformer: transformer.MakeDoFunc(lookupsPerDeviceMapper, workers),
 			Writer:      addressIdToDomainStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinMacWithLookups",
 			Reader:      store.NewDemuxingSeeker(addressIdStore, addressIdToDomainStore),
-			Transformer: transformer.TransformFunc(JoinMacWithLookups),
+			Transformer: transformer.TransformFunc(joinMacWithLookups),
 			Writer:      lookupsPerDeviceSharded,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenLookupsToNodeAndMac",
 			Reader:      lookupsPerDeviceSharded,
-			Transformer: transformer.TransformFunc(FlattenLookupsToNodeAndMac),
+			Transformer: transformer.TransformFunc(flattenLookupsToNodeAndMac),
 			Writer:      lookupsPerDeviceStore,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenLookupsToNodeMacAndTimestamp",
 			Reader:      lookupsPerDeviceSharded,
-			Transformer: transformer.TransformFunc(FlattenLookupsToNodeMacAndTimestamp),
+			Transformer: transformer.TransformFunc(flattenLookupsToNodeMacAndTimestamp),
 			Writer:      lookupsPerDevicePerHourStore,
 		},
 	}
 }
 
-func LookupsPerDeviceMapper(record *store.Record, outputChan chan *store.Record) {
+func lookupsPerDeviceMapper(record *store.Record, outputChan chan *store.Record) {
 	mobileDomainRegexp, err := regexp.Compile(`(^m\.|\.m\.)`)
 	if err != nil {
 		panic(err)
@@ -94,7 +94,7 @@ func LookupsPerDeviceMapper(record *store.Record, outputChan chan *store.Record)
 	}
 }
 
-func JoinMacWithLookups(inputChan, outputChan chan *store.Record) {
+func joinMacWithLookups(inputChan, outputChan chan *store.Record) {
 	var (
 		session   SessionKey
 		addressId int32
@@ -124,7 +124,7 @@ func JoinMacWithLookups(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func FlattenLookupsToNodeAndMac(inputChan, outputChan chan *store.Record) {
+func flattenLookupsToNodeAndMac(inputChan, outputChan chan *store.Record) {
 	var nodeId, macAddress, domain string
 	grouper := transformer.GroupRecords(inputChan, &nodeId, &macAddress, &domain)
 	for grouper.NextGroup() {
@@ -142,7 +142,7 @@ func FlattenLookupsToNodeAndMac(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func FlattenLookupsToNodeMacAndTimestamp(inputChan, outputChan chan *store.Record) {
+func flattenLookupsToNodeMacAndTimestamp(inputChan, outputChan chan *store.Record) {
 	var nodeId, macAddress, domain string
 	grouper := transformer.GroupRecords(inputChan, &nodeId, &macAddress, &domain)
 	for grouper.NextGroup() {

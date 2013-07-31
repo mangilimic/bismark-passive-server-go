@@ -6,13 +6,13 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-type FilterSessions struct {
+type filterSessions struct {
 	SessionStartTime int64
 	SessionEndTime   int64
 }
 
 func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, tracesStore, traceKeyRangesStore store.Reader, filteredStore store.Writer) []transformer.PipelineStage {
-	parameters := FilterSessions{
+	parameters := filterSessions{
 		SessionStartTime: sessionStartTime * 1000000,
 		SessionEndTime:   sessionEndTime * 1000000,
 	}
@@ -26,7 +26,7 @@ func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, tracesStore,
 	}
 }
 
-func (parameters FilterSessions) Do(inputChan, outputChan chan *store.Record) {
+func (parameters filterSessions) Do(inputChan, outputChan chan *store.Record) {
 	traceDuration := int64(30000000) // This is a big assumption about how clients generate traces.
 	var useCurrentSession bool
 	var currentSession *SessionKey

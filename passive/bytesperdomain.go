@@ -48,74 +48,74 @@ func BytesPerDomainPipeline(stores *BytesPerDomainPipelineStores, workers int) [
 		transformer.PipelineStage{
 			Name:        "BytesPerDomainMapper",
 			Reader:      newTracesStore,
-			Transformer: transformer.MakeMultipleOutputsDoFunc(BytesPerDomainMapper, 7, workers),
+			Transformer: transformer.MakeMultipleOutputsDoFunc(bytesPerDomainMapper, 7, workers),
 			Writer:      store.NewMuxingWriter(stores.AddressIdTable, stores.ARecordTable, stores.CnameRecordTable, stores.FlowIpsTable, stores.AddressIpTable, stores.BytesPerTimestampSharded, stores.Whitelist),
 		},
 		SessionPipelineStage(newTracesStore, stores.Sessions),
 		transformer.PipelineStage{
 			Name:        "JoinAAddressIdsWithMacAddresses",
 			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AddressIdTable, stores.ARecordTable)),
-			Transformer: transformer.TransformFunc(JoinAddressIdsWithMacAddresses),
+			Transformer: transformer.TransformFunc(joinAddressIdsWithMacAddresses),
 			Writer:      stores.ARecordsWithMac,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinCnameAddressIdsWithMacAddresses",
 			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AddressIdTable, stores.CnameRecordTable)),
-			Transformer: transformer.TransformFunc(JoinAddressIdsWithMacAddresses),
+			Transformer: transformer.TransformFunc(joinAddressIdsWithMacAddresses),
 			Writer:      stores.CnameRecordsWithMac,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinARecordsWithCnameRecords",
 			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.ARecordsWithMac, stores.CnameRecordsWithMac)),
-			Transformer: transformer.TransformFunc(JoinARecordsWithCnameRecords),
+			Transformer: transformer.TransformFunc(joinARecordsWithCnameRecords),
 			Writer:      stores.AllDnsMappings,
 		},
 		transformer.PipelineStage{
 			Name:        "EmitARecords",
 			Reader:      excludeOldSessions(stores.ARecordsWithMac),
-			Transformer: transformer.MakeDoFunc(EmitARecords, workers),
+			Transformer: transformer.MakeDoFunc(emitARecords, workers),
 			Writer:      stores.AllDnsMappings,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinDomainsWithWhitelist",
 			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.Whitelist, stores.AllDnsMappings)),
-			Transformer: transformer.TransformFunc(JoinDomainsWithWhitelist),
+			Transformer: transformer.TransformFunc(joinDomainsWithWhitelist),
 			Writer:      stores.AllWhitelistedMappings,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinMacWithFlowId",
 			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AddressIpTable, stores.FlowIpsTable)),
-			Transformer: transformer.TransformFunc(JoinMacWithFlowId),
+			Transformer: transformer.TransformFunc(joinMacWithFlowId),
 			Writer:      stores.FlowMacsTable,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinWhitelistedDomainsWithFlows",
 			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AllWhitelistedMappings, stores.FlowMacsTable)),
-			Transformer: transformer.TransformFunc(JoinWhitelistedDomainsWithFlows),
+			Transformer: transformer.TransformFunc(joinWhitelistedDomainsWithFlows),
 			Writer:      stores.FlowDomainsTable,
 		},
 		transformer.PipelineStage{
 			Name:        "GroupDomainsAndMacAddresses",
 			Reader:      excludeOldSessions(stores.FlowDomainsTable),
-			Transformer: transformer.TransformFunc(GroupDomainsAndMacAddresses),
+			Transformer: transformer.TransformFunc(groupDomainsAndMacAddresses),
 			Writer:      stores.FlowDomainsGroupedTable,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinDomainsWithSizes",
 			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.FlowDomainsGroupedTable, stores.BytesPerTimestampSharded)),
-			Transformer: transformer.TransformFunc(JoinDomainsWithSizes),
+			Transformer: transformer.TransformFunc(joinDomainsWithSizes),
 			Writer:      stores.BytesPerDomainSharded,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenIntoBytesPerDevice",
 			Reader:      stores.BytesPerDomainSharded,
-			Transformer: transformer.TransformFunc(FlattenIntoBytesPerDevice),
+			Transformer: transformer.TransformFunc(flattenIntoBytesPerDevice),
 			Writer:      stores.BytesPerDomainPerDevice,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenIntoBytesPerTimestamp",
 			Reader:      stores.BytesPerDomainSharded,
-			Transformer: transformer.TransformFunc(FlattenIntoBytesPerTimestamp),
+			Transformer: transformer.TransformFunc(flattenIntoBytesPerTimestamp),
 			Writer:      stores.BytesPerDomain,
 		},
 		transformer.PipelineStage{
@@ -126,7 +126,7 @@ func BytesPerDomainPipeline(stores *BytesPerDomainPipelineStores, workers int) [
 	}, TraceKeyRangesPipeline(newTracesStore, stores.TraceKeyRanges, stores.ConsolidatedTraceKeyRanges)...)
 }
 
-func MapTraceToAddressIdTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
+func mapTraceToAddressIdTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	if trace.AddressTableFirstId == nil || trace.AddressTableSize == nil {
 		panic("AddressTableFirstId and AddressTableSize must be present in all traces")
 	}
@@ -159,7 +159,7 @@ func lookupPacketTimestampFromId(packetId int32, trace *Trace) int64 {
 	return *entry.TimestampMicroseconds
 }
 
-func MapTraceToARecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
+func mapTraceToARecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	for _, entry := range trace.ARecord {
 		if entry.AddressId == nil || entry.Domain == nil || entry.Anonymized == nil || entry.PacketId == nil || entry.Ttl == nil || entry.IpAddress == nil {
 			continue
@@ -172,7 +172,7 @@ func MapTraceToARecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *s
 	}
 }
 
-func MapTraceToCnameRecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
+func mapTraceToCnameRecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	for _, entry := range trace.CnameRecord {
 		if entry.AddressId == nil || entry.Cname == nil || entry.CnameAnonymized == nil || entry.PacketId == nil || entry.Ttl == nil || entry.Domain == nil || entry.DomainAnonymized == nil {
 			continue
@@ -188,7 +188,7 @@ func MapTraceToCnameRecordTable(traceKey *TraceKey, trace *Trace, outputChan cha
 	}
 }
 
-func MapTraceToFlowIpsTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
+func mapTraceToFlowIpsTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	// A flow's "start timestamp" is the timestamp of its first packet.
 	// Figure this out using a two step process:
 	// 1. Figure out which flow IDs started in the current trace.
@@ -227,7 +227,7 @@ func MapTraceToFlowIpsTable(traceKey *TraceKey, trace *Trace, outputChan chan *s
 	}
 }
 
-func MapTraceToAddressIpTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
+func mapTraceToAddressIpTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	for _, entry := range trace.AddressTableEntry {
 		if entry.MacAddress == nil || entry.IpAddress == nil {
 			continue
@@ -239,7 +239,7 @@ func MapTraceToAddressIpTable(traceKey *TraceKey, trace *Trace, outputChan chan 
 	}
 }
 
-func MapTraceToBytesPerTimestampSharded(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
+func mapTraceToBytesPerTimestampSharded(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	flowIdAndTimestampToSize := make(map[int32]map[int64]int64)
 	for _, packetSeriesEntry := range trace.PacketSeries {
 		if packetSeriesEntry.FlowId == nil || packetSeriesEntry.TimestampMicroseconds == nil || packetSeriesEntry.Size == nil {
@@ -262,7 +262,7 @@ func MapTraceToBytesPerTimestampSharded(traceKey *TraceKey, trace *Trace, output
 	}
 }
 
-func MapTraceToWhitelist(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
+func mapTraceToWhitelist(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	if traceKey.SequenceNumber == 0 {
 		outputChan <- &store.Record{
 			Key:   key.EncodeOrDie(traceKey.SessionKey()),
@@ -273,7 +273,7 @@ func MapTraceToWhitelist(traceKey *TraceKey, trace *Trace, outputChan chan *stor
 
 type traceMapper func(*TraceKey, *Trace, chan *store.Record)
 
-func BytesPerDomainMapper(record *store.Record, outputChans ...chan *store.Record) {
+func bytesPerDomainMapper(record *store.Record, outputChans ...chan *store.Record) {
 	var traceKey TraceKey
 	key.DecodeOrDie(record.Key, &traceKey)
 	var trace Trace
@@ -282,20 +282,20 @@ func BytesPerDomainMapper(record *store.Record, outputChans ...chan *store.Recor
 	}
 
 	mappers := []traceMapper{
-		MapTraceToAddressIdTable,
-		MapTraceToARecordTable,
-		MapTraceToCnameRecordTable,
-		MapTraceToFlowIpsTable,
-		MapTraceToAddressIpTable,
-		MapTraceToBytesPerTimestampSharded,
-		MapTraceToWhitelist,
+		mapTraceToAddressIdTable,
+		mapTraceToARecordTable,
+		mapTraceToCnameRecordTable,
+		mapTraceToFlowIpsTable,
+		mapTraceToAddressIpTable,
+		mapTraceToBytesPerTimestampSharded,
+		mapTraceToWhitelist,
 	}
 	for idx, mapper := range mappers {
 		mapper(&traceKey, &trace, outputChans[idx])
 	}
 }
 
-func JoinAddressIdsWithMacAddresses(inputChan, outputChan chan *store.Record) {
+func joinAddressIdsWithMacAddresses(inputChan, outputChan chan *store.Record) {
 	var (
 		session   SessionKey
 		addressId int32
@@ -321,7 +321,7 @@ func JoinAddressIdsWithMacAddresses(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func EmitARecords(record *store.Record, outputChan chan *store.Record) {
+func emitARecords(record *store.Record, outputChan chan *store.Record) {
 	var (
 		session                      SessionKey
 		macAddress, domain           []byte
@@ -346,10 +346,10 @@ type dnsRecord struct {
 	value      string
 }
 
-type DnsRecords []*dnsRecord
+type dnsRecords []*dnsRecord
 
-func (records DnsRecords) Len() int { return len(records) }
-func (records DnsRecords) Less(i, j int) bool {
+func (records dnsRecords) Len() int { return len(records) }
+func (records dnsRecords) Less(i, j int) bool {
 	if records[i].timestamp < records[j].timestamp {
 		return true
 	}
@@ -358,9 +358,9 @@ func (records DnsRecords) Less(i, j int) bool {
 	}
 	return false
 }
-func (records DnsRecords) Swap(i, j int) { records[i], records[j] = records[j], records[i] }
+func (records dnsRecords) Swap(i, j int) { records[i], records[j] = records[j], records[i] }
 
-func JoinARecordsWithCnameRecords(inputChan, outputChan chan *store.Record) {
+func joinARecordsWithCnameRecords(inputChan, outputChan chan *store.Record) {
 	var (
 		session            SessionKey
 		macAddress, domain []byte
@@ -368,7 +368,7 @@ func JoinARecordsWithCnameRecords(inputChan, outputChan chan *store.Record) {
 	)
 	grouper := transformer.GroupRecords(inputChan, &session, &macAddress, &domain, &anonymized)
 	for grouper.NextGroup() {
-		var allRecords DnsRecords
+		var allRecords dnsRecords
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			newStartDnsRecord := dnsRecord{startEvent: true, aRecord: record.DatabaseIndex == 0}
@@ -433,7 +433,7 @@ func JoinARecordsWithCnameRecords(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func JoinDomainsWithWhitelist(inputChan, outputChan chan *store.Record) {
+func joinDomainsWithWhitelist(inputChan, outputChan chan *store.Record) {
 	var session SessionKey
 	grouper := transformer.GroupRecords(inputChan, &session)
 	for grouper.NextGroup() {
@@ -468,7 +468,7 @@ func JoinDomainsWithWhitelist(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func JoinMacWithFlowId(inputChan, outputChan chan *store.Record) {
+func joinMacWithFlowId(inputChan, outputChan chan *store.Record) {
 	var (
 		session SessionKey
 		localIp []byte
@@ -499,7 +499,7 @@ func JoinMacWithFlowId(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func JoinWhitelistedDomainsWithFlows(inputChan, outputChan chan *store.Record) {
+func joinWhitelistedDomainsWithFlows(inputChan, outputChan chan *store.Record) {
 	var (
 		session              SessionKey
 		macAddress, remoteIp []byte
@@ -539,7 +539,7 @@ func JoinWhitelistedDomainsWithFlows(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func GroupDomainsAndMacAddresses(inputChan, outputChan chan *store.Record) {
+func groupDomainsAndMacAddresses(inputChan, outputChan chan *store.Record) {
 	var (
 		session                SessionKey
 		flowId, sequenceNumber int32
@@ -561,7 +561,7 @@ func GroupDomainsAndMacAddresses(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func JoinDomainsWithSizes(inputChan, outputChan chan *store.Record) {
+func joinDomainsWithSizes(inputChan, outputChan chan *store.Record) {
 	var (
 		session SessionKey
 		flowId  int32
@@ -594,7 +594,7 @@ func JoinDomainsWithSizes(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func FlattenIntoBytesPerDevice(inputChan, outputChan chan *store.Record) {
+func flattenIntoBytesPerDevice(inputChan, outputChan chan *store.Record) {
 	var (
 		nodeId, domain []byte
 		timestamp      int64
@@ -616,7 +616,7 @@ func FlattenIntoBytesPerDevice(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-func FlattenIntoBytesPerTimestamp(inputChan, outputChan chan *store.Record) {
+func flattenIntoBytesPerTimestamp(inputChan, outputChan chan *store.Record) {
 	var (
 		nodeId, domain []byte
 		timestamp      int64

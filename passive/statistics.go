@@ -17,31 +17,31 @@ func AggregateStatisticsPipeline(tracesStore, availabilityIntervalsStore store.S
 		transformer.PipelineStage{
 			Name:        "AggregateStatisticsMapper",
 			Reader:      store.NewRangeExcludingReader(tracesStore, traceKeyRangesStore),
-			Transformer: transformer.MakeMapFunc(AggregateStatisticsMapper, workers),
+			Transformer: transformer.MakeMapFunc(aggregateStatisticsMapper, workers),
 			Writer:      traceAggregatesStore,
 		},
 		SessionPipelineStage(newTracesStore, sessionsStore),
 		transformer.PipelineStage{
 			Name:        "AggregateStatisticsReduceBySession",
 			Reader:      store.NewPrefixIncludingReader(traceAggregatesStore, sessionsStore),
-			Transformer: transformer.TransformFunc(AggregateStatisticsReduceBySession),
+			Transformer: transformer.TransformFunc(aggregateStatisticsReduceBySession),
 			Writer:      sessionAggregatesStore,
 		},
 		transformer.PipelineStage{
 			Name:        "AggregateStatisticsReducer",
 			Reader:      sessionAggregatesStore,
-			Transformer: transformer.TransformFunc(AggregateStatisticsReducer),
+			Transformer: transformer.TransformFunc(aggregateStatisticsReducer),
 			Writer:      nodeAggregatesStore,
 		},
 		transformer.PipelineStage{
 			Name:   "AggregateStatisticsJson",
 			Reader: nodeAggregatesStore,
-			Writer: &AggregateStatisticsJsonStore{writer: jsonWriter},
+			Writer: &aggregateStatisticsJsonStore{writer: jsonWriter},
 		},
 	}, TraceKeyRangesPipeline(newTracesStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
-func AggregateStatisticsMapper(record *store.Record) *store.Record {
+func aggregateStatisticsMapper(record *store.Record) *store.Record {
 	var trace Trace
 	if err := proto.Unmarshal(record.Value, &trace); err != nil {
 		panic(err)
@@ -94,7 +94,7 @@ func mergeAggregateStatistics(source, destination *AggregateStatistics) {
 	*destination.Bytes += *source.Bytes
 }
 
-func AggregateStatisticsReduceBySession(inputChan, outputChan chan *store.Record) {
+func aggregateStatisticsReduceBySession(inputChan, outputChan chan *store.Record) {
 	var session SessionKey
 	grouper := transformer.GroupRecords(inputChan, &session)
 	for grouper.NextGroup() {
@@ -144,7 +144,7 @@ func AggregateStatisticsReduceBySession(inputChan, outputChan chan *store.Record
 	}
 }
 
-func AggregateStatisticsReducer(inputChan, outputChan chan *store.Record) {
+func aggregateStatisticsReducer(inputChan, outputChan chan *store.Record) {
 	var nodeId []byte
 	grouper := transformer.GroupRecords(inputChan, &nodeId)
 	for grouper.NextGroup() {
@@ -175,12 +175,12 @@ func AggregateStatisticsReducer(inputChan, outputChan chan *store.Record) {
 	}
 }
 
-type AggregateStatisticsJsonStore struct {
+type aggregateStatisticsJsonStore struct {
 	writer io.Writer
 	first  bool
 }
 
-func (store *AggregateStatisticsJsonStore) BeginWriting() error {
+func (store *aggregateStatisticsJsonStore) BeginWriting() error {
 	if _, err := fmt.Fprintf(store.writer, "["); err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (store *AggregateStatisticsJsonStore) BeginWriting() error {
 	return nil
 }
 
-func (store *AggregateStatisticsJsonStore) WriteRecord(record *store.Record) error {
+func (store *aggregateStatisticsJsonStore) WriteRecord(record *store.Record) error {
 	var nodeId string
 	key.DecodeOrDie(record.Key, &nodeId)
 	if store.first {
@@ -208,7 +208,7 @@ func (store *AggregateStatisticsJsonStore) WriteRecord(record *store.Record) err
 	return nil
 }
 
-func (store *AggregateStatisticsJsonStore) EndWriting() error {
+func (store *aggregateStatisticsJsonStore) EndWriting() error {
 	if _, err := fmt.Fprintf(store.writer, "]"); err != nil {
 		return err
 	}

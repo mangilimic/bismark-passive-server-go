@@ -18,19 +18,19 @@ func BytesPerMinutePipeline(tracesStore store.Seeker, mappedStore, bytesPerMinut
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
 			Reader:      store.NewRangeExcludingReader(tracesStore, traceKeyRangesStore),
-			Transformer: transformer.MakeDoTransformer(BytesPerMinuteMapper(transformer.NewNonce()), workers),
+			Transformer: transformer.MakeDoTransformer(bytesPerMinuteMapper(transformer.NewNonce()), workers),
 			Writer:      mappedStore,
 		},
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteReducer",
 			Reader:      mappedStore,
-			Transformer: transformer.TransformFunc(BytesPerMinuteReducer),
+			Transformer: transformer.TransformFunc(bytesPerMinuteReducer),
 			Writer:      bytesPerMinuteStore,
 		},
 		transformer.PipelineStage{
 			Name:        "BytesPerHourReducer",
 			Reader:      bytesPerMinuteStore,
-			Transformer: transformer.TransformFunc(BytesPerHourReducer),
+			Transformer: transformer.TransformFunc(bytesPerHourReducer),
 			Writer:      bytesPerHourStore,
 		},
 		transformer.PipelineStage{
@@ -41,9 +41,9 @@ func BytesPerMinutePipeline(tracesStore store.Seeker, mappedStore, bytesPerMinut
 	}, TraceKeyRangesPipeline(store.NewRangeExcludingReader(tracesStore, traceKeyRangesStore), traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
-type BytesPerMinuteMapper transformer.Nonce
+type bytesPerMinuteMapper transformer.Nonce
 
-func (nonce BytesPerMinuteMapper) Do(inputRecord *store.Record, outputChan chan *store.Record) {
+func (nonce bytesPerMinuteMapper) Do(inputRecord *store.Record, outputChan chan *store.Record) {
 	var traceKey TraceKey
 	key.DecodeOrDie(inputRecord.Key, &traceKey)
 
@@ -68,7 +68,7 @@ func (nonce BytesPerMinuteMapper) Do(inputRecord *store.Record, outputChan chan 
 	}
 }
 
-func BytesPerMinuteReducer(inputChan, outputChan chan *store.Record) {
+func bytesPerMinuteReducer(inputChan, outputChan chan *store.Record) {
 	var node []byte
 	var timestamp int64
 	grouper := transformer.GroupRecords(inputChan, &node, &timestamp)
@@ -93,7 +93,7 @@ func getHour(timestamp int64) int64 {
 	return hour.Unix()
 }
 
-func BytesPerHourReducer(inputChan, outputChan chan *store.Record) {
+func bytesPerHourReducer(inputChan, outputChan chan *store.Record) {
 	var currentNode []byte
 	currentHour := int64(-1)
 	var currentSize int64
