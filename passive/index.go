@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
@@ -27,6 +28,23 @@ func init() {
 	tarsSkipped = expvar.NewInt("TarsSkipped")
 	tracesFailed = expvar.NewInt("TracesFailed")
 	tracesIndexed = expvar.NewInt("TracesIndexed")
+}
+
+func IndexTarballsPipeline(tarballsPath string, tarnamesStore, tarnamesIndexedStore store.ReadingWriter, tracesStore store.Writer, workers int) []transformer.PipelineStage {
+	tarballsPattern := filepath.Join(tarballsPath, "*", "*", "*.tar.gz")
+	return []transformer.PipelineStage{
+		transformer.PipelineStage{
+			Name:   "ScanTraceTarballs",
+			Reader: store.NewGlobReader(tarballsPattern),
+			Writer: tarnamesStore,
+		},
+		transformer.PipelineStage{
+			Name:        "IndexTraces",
+			Transformer: transformer.MakeMultipleOutputsGroupDoFunc(IndexTarballs, 2, workers),
+			Reader:      store.NewDemuxingReader(tarnamesStore, tarnamesIndexedStore),
+			Writer:      store.NewMuxingWriter(tracesStore, tarnamesIndexedStore),
+		},
+	}
 }
 
 func traceKey(trace *Trace) []byte {

@@ -14,12 +14,12 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.PipelineStage {
+func getPipelineStages(dbRoot string, workers int) map[string]func() []transformer.PipelineStage {
 	dbPath := func(filename string) string {
 		return filepath.Join(dbRoot, filename)
 	}
-	switch pipelineName {
-	case "availability":
+	pipelineFuncs := make(map[string]func() []transformer.PipelineStage)
+	pipelineFuncs["availability"] = func() []transformer.PipelineStage {
 		flagset := flag.NewFlagSet("availability", flag.ExitOnError)
 		jsonOutput := flagset.String("json_output", "/dev/null", "Write availiability in JSON format to this file.")
 		flagset.Parse(flag.Args()[2:])
@@ -37,7 +37,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			store.NewLevelDbStore(dbPath("consistent-ranges")),
 			time.Now().Unix(),
 			workers)
-	case "bytesperdevice":
+	}
+	pipelineFuncs["bytesperdevice"] = func() []transformer.PipelineStage {
 		return passive.BytesPerDevicePipeline(
 			store.NewLevelDbStore(dbPath("traces")),
 			store.NewLevelDbStore(dbPath("consistent-ranges")),
@@ -54,7 +55,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			store.NewLevelDbStore(dbPath("bytesperdevice-trace-key-ranges")),
 			store.NewLevelDbStore(dbPath("bytesperdevice-consolidated-trace-key-ranges")),
 			workers)
-	case "bytesperdomain":
+	}
+	pipelineFuncs["bytesperdomain"] = func() []transformer.PipelineStage {
 		stores := passive.BytesPerDomainPipelineStores{
 			Traces:                     store.NewLevelDbStore(dbPath("traces")),
 			AvailabilityIntervals:      store.NewLevelDbStore(dbPath("consistent-ranges")),
@@ -81,7 +83,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			Sessions:                   store.NewLevelDbStore(dbPath("bytesperdomain-sessions")),
 		}
 		return passive.BytesPerDomainPipeline(&stores, workers)
-	case "bytesperminute":
+	}
+	pipelineFuncs["bytesperminute"] = func() []transformer.PipelineStage {
 		return passive.BytesPerMinutePipeline(
 			store.NewLevelDbStore(dbPath("traces")),
 			store.NewLevelDbStore(dbPath("bytesperminute-mapped")),
@@ -91,7 +94,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			store.NewLevelDbStore(dbPath("bytesperminute-trace-key-ranges")),
 			store.NewLevelDbStore(dbPath("bytesperminute-consolidated-trace-key-ranges")),
 			workers)
-	case "filternode":
+	}
+	pipelineFuncs["filternode"] = func() []transformer.PipelineStage {
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
 		flagset.Parse(flag.Args()[2:])
@@ -104,7 +108,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 				Writer: filteredStore,
 			},
 		}
-	case "filterdates":
+	}
+	pipelineFuncs["filterdates"] = func() []transformer.PipelineStage {
 		flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 		sessionStartDate := flagset.String("session_start_date", "20120301", "Retain only session starting after this date, in YYYYMMDD format.")
 		sessionEndDate := flagset.String("session_end_date", "20120401", "Retain only session starting before this date, in YYYYMMDD format.")
@@ -124,19 +129,17 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			store.NewLevelDbStore(dbPath("traces")),
 			store.NewLevelDbStore(dbPath("availability-done")),
 			store.NewLevelDbStore(dbPath(fmt.Sprintf("filtered-%s-%s", *sessionStartDate, *sessionEndDate))))
-	case "index":
+	}
+	pipelineFuncs["index"] = func() []transformer.PipelineStage {
+		flagset := flag.NewFlagSet("index", flag.ExitOnError)
+		tarballsPath := flagset.String("tarballs_path", "/data/users/sburnett/passive-organized", "Read tarballs from this directory.")
+		flagset.Parse(flag.Args()[2:])
 		tarnamesStore := store.NewLevelDbStore(dbPath("tarnames"))
 		tarnamesIndexedStore := store.NewLevelDbStore(dbPath("tarnames-indexed"))
 		tracesStore := store.NewLevelDbStore(dbPath("traces"))
-		return []transformer.PipelineStage{
-			transformer.PipelineStage{
-				Name:        "ParseTraces",
-				Transformer: transformer.MakeMultipleOutputsGroupDoFunc(passive.IndexTarballs, 2, workers),
-				Reader:      store.NewDemuxingReader(tarnamesStore, tarnamesIndexedStore),
-				Writer:      store.NewMuxingWriter(tracesStore, tarnamesIndexedStore),
-			},
-		}
-	case "lookupsperdevice":
+		return passive.IndexTarballsPipeline(*tarballsPath, tarnamesStore, tarnamesIndexedStore, tracesStore, workers)
+	}
+	pipelineFuncs["lookupsperdevice"] = func() []transformer.PipelineStage {
 		return passive.LookupsPerDevicePipeline(
 			store.NewLevelDbStore(dbPath("traces")),
 			store.NewLevelDbStore(dbPath("consistent-ranges")),
@@ -146,7 +149,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			store.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device")),
 			store.NewLevelDbStore(dbPath("lookupsperdevice-lookups-per-device-per-hour")),
 			workers)
-	case "print":
+	}
+	pipelineFuncs["print"] = func() []transformer.PipelineStage {
 		flagset := flag.NewFlagSet("print", flag.ExitOnError)
 		storePath := flagset.String("leveldb", "", "Print the contents of this LevelDB")
 		keyFormat := flagset.String("key_format", "", "Format keys using this format string")
@@ -157,7 +161,8 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 		}
 		store := store.NewLevelDbStore(dbPath(*storePath))
 		return passive.RecordPrinterPipeline(store, *keyFormat, *valueFormat)
-	case "statistics":
+	}
+	pipelineFuncs["statistics"] = func() []transformer.PipelineStage {
 		flagset := flag.NewFlagSet("statistics", flag.ExitOnError)
 		jsonOutput := flagset.String("json_output", "/dev/null", "Write statistics in JSON format to this file.")
 		flagset.Parse(flag.Args()[2:])
@@ -176,31 +181,14 @@ func getPipelineStages(pipelineName, dbRoot string, workers int) []transformer.P
 			store.NewLevelDbStore(dbPath("statistics-trace-key-ranges")),
 			store.NewLevelDbStore(dbPath("statistics-consolidated-trace-key-ranges")),
 			workers)
-	default:
-		flag.Usage()
-		log.Fatalf("Invalid pipeline.")
 	}
-	return nil
+	return pipelineFuncs
 }
 
 func main() {
-	workers := flag.Int("workers", 4, "Number of worker threads for mappers.")
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s <pipeline> <db root>:\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	skipStages := flag.Int("skip_stages", 0, "Skip this many stages at the beginning of the pipeline.")
-	flag.Parse()
+	name, pipeline := transformer.ParsePipelineChoice(getPipelineStages)
 
-	if flag.NArg() < 2 {
-		flag.Usage()
-		return
-	}
-	pipelineName := flag.Arg(0)
-	dbRoot := flag.Arg(1)
+	go cube.Run(fmt.Sprintf("bismark_passive_pipeline_%s", name))
 
-	go cube.Run(fmt.Sprintf("bismark_passive_pipeline_%s", pipelineName))
-
-	stages := getPipelineStages(pipelineName, dbRoot, *workers)
-	transformer.RunPipeline(stages, *skipStages)
+	transformer.RunPipeline(pipeline)
 }
