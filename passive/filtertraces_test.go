@@ -41,7 +41,7 @@ func makeRangeRecord(nodeId string, sessionId int64, firstSequenceNumber, lastSe
 }
 
 func runFilterSessionsPipeline(startSecs, endSecs int64, tracesStore, traceKeyRangesStore, filteredStore *store.SliceStore) {
-	transformer.RunPipeline(FilterSessionsPipeline(startSecs, endSecs, tracesStore, traceKeyRangesStore, filteredStore), 0)
+	transformer.RunPipeline(FilterSessionsPipeline(startSecs, endSecs, tracesStore, traceKeyRangesStore, filteredStore))
 
 	filteredStore.BeginReading()
 	for {

@@ -51,7 +51,7 @@ func runBytesPerDomainPipeline(consistentRanges []*store.Record, allTraces ...ma
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerDomainPipeline(&stores, 1), 0)
+		transformer.RunPipeline(BytesPerDomainPipeline(&stores, 1))
 	}
 
 	fmt.Printf("BytesPerDomain:\n")

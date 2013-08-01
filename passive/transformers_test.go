@@ -44,7 +44,7 @@ func runSessions(records []*store.Record) {
 	sessionsStore := store.SliceStore{}
 	transformer.RunPipeline([]transformer.PipelineStage{
 		SessionPipelineStage(&traces, &sessionsStore),
-	}, 0)
+	})
 
 	sessionsStore.BeginReading()
 	for {
@@ -88,7 +88,7 @@ func runCalculateTraceKeyRanges(records []*store.Record) {
 
 	rangesStore := store.SliceStore{}
 	consolidatedStore := store.SliceStore{}
-	transformer.RunPipeline(TraceKeyRangesPipeline(&traces, &rangesStore, &consolidatedStore), 0)
+	transformer.RunPipeline(TraceKeyRangesPipeline(&traces, &rangesStore, &consolidatedStore))
 
 	rangesStore.BeginReading()
 	for {
@@ -114,7 +114,7 @@ func runConsolidateTraceKeyRanges(records, moreRecords []*store.Record) {
 
 	rangesStore := store.SliceStore{}
 	consolidatedStore := store.SliceStore{}
-	transformer.RunPipeline(TraceKeyRangesPipeline(&traces, &rangesStore, &consolidatedStore), 0)
+	transformer.RunPipeline(TraceKeyRangesPipeline(&traces, &rangesStore, &consolidatedStore))
 
 	moreTraces := store.SliceStore{}
 	moreTraces.BeginWriting()
@@ -123,7 +123,7 @@ func runConsolidateTraceKeyRanges(records, moreRecords []*store.Record) {
 	}
 	moreTraces.EndWriting()
 
-	transformer.RunPipeline(TraceKeyRangesPipeline(&moreTraces, &rangesStore, &consolidatedStore), 0)
+	transformer.RunPipeline(TraceKeyRangesPipeline(&moreTraces, &rangesStore, &consolidatedStore))
 
 	rangesStore.BeginReading()
 	for {

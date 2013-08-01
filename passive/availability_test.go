@@ -31,7 +31,7 @@ func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) 
 	writer := bytes.NewBuffer([]byte{})
 	excludeRangesStore := store.SliceStore{}
 	consistentRangesStore := store.SliceStore{}
-	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1), 0)
+	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1))
 	fmt.Printf("%s", writer.Bytes())
 }
 
@@ -56,7 +56,7 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 	writer := bytes.NewBuffer([]byte{})
 	excludeRangesStore := store.SliceStore{}
 	consistentRangesStore := store.SliceStore{}
-	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1), 0)
+	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1))
 
 	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range moreTimestamps {
@@ -84,7 +84,7 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 	}
 
 	anotherWriter := bytes.NewBuffer([]byte{})
-	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, anotherWriter, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1), 0)
+	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, anotherWriter, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1))
 	fmt.Printf("%s", anotherWriter.Bytes())
 }
 

@@ -40,7 +40,7 @@ func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*st
 	lookupsPerDeviceStore := store.SliceStore{}
 	lookupsPerDevicePerHourStore := store.SliceStore{}
 
-	transformer.RunPipeline(LookupsPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &addressIdStore, &addressIdToDomainStore, &lookupsPerDeviceSharded, &lookupsPerDeviceStore, &lookupsPerDevicePerHourStore, 1), 0)
+	transformer.RunPipeline(LookupsPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &addressIdStore, &addressIdToDomainStore, &lookupsPerDeviceSharded, &lookupsPerDeviceStore, &lookupsPerDevicePerHourStore, 1))
 
 	fmt.Printf("LookupsPerDevice:\n")
 	lookupsPerDeviceStore.BeginReading()

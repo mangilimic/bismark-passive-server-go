@@ -58,7 +58,7 @@ func runAggregateStatisticsPipeline(consistentRanges []*store.Record, allTraces 
 
 		writer = bytes.NewBuffer([]byte{})
 
-		transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &availabilityIntervalsStore, &traceAggregatesStore, &sessionAggregatesStore, &nodeAggregatesStore, writer, &sessionsStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+		transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &availabilityIntervalsStore, &traceAggregatesStore, &sessionAggregatesStore, &nodeAggregatesStore, writer, &sessionsStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1))
 	}
 	fmt.Printf("%s", writer.Bytes())
 }

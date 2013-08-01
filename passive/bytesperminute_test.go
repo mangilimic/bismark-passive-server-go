@@ -36,7 +36,7 @@ func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
 			tracesStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: encodedTrace})
 		}
 		tracesStore.EndWriting()
-		transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, &bytesPerHourStore, &bytesPerHourPostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+		transformer.RunPipeline(BytesPerMinutePipeline(&tracesStore, &mappedStore, &bytesPerMinuteStore, &bytesPerHourStore, &bytesPerHourPostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1))
 	}
 
 	bytesPerMinuteStore.BeginReading()

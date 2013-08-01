@@ -41,7 +41,7 @@ func runBytesPerDevicePipeline(consistentRanges []*store.Record, allTraces ...ma
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &sessionsStore, &addressTableStore, &flowTableStore, &packetsStore, &flowIdToMacStore, &flowIdToMacsStore, &bytesPerDeviceUnreducedStore, &bytesPerDeviceSessionStore, &bytesPerDeviceStore, &bytesPerDevicePostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1), 0)
+		transformer.RunPipeline(BytesPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &sessionsStore, &addressTableStore, &flowTableStore, &packetsStore, &flowIdToMacStore, &flowIdToMacsStore, &bytesPerDeviceUnreducedStore, &bytesPerDeviceSessionStore, &bytesPerDeviceStore, &bytesPerDevicePostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1))
 	}
 
 	bytesPerDeviceStore.BeginReading()
