@@ -21,3 +21,5 @@ Installation without root
 6. Download leveldb from http://code.google.com/p/leveldb. Build it in a suitable non-tmp directory. `export LEVELDB_PATH="/wherever/you/built/leveldb"`
 7. `LD_LIBRARY_PATH="" CGO_CFLAGS="-I$LEVELDB_PATH/include" CGO_LDFLAGS="-L$LEVELDB_PATH" go get -x -u github.com/jmhodges/levigo`
 8. `go get github.com/sburnett/bismark-passive-server-go/passive/{,scanner,pipelines}`
+
+[![Build Status](https://travis-ci.org/sburnett/bismark-passive-server-go.png)](https://travis-ci.org/sburnett/bismark-passive-server-go)
