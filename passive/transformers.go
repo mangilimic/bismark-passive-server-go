@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -18,7 +18,7 @@ type TraceKey struct {
 }
 
 func (traceKey *TraceKey) EncodeLexicographically() ([]byte, error) {
-	return key.Encode(
+	return lex.Encode(
 		traceKey.NodeId,
 		traceKey.AnonymizationContext,
 		traceKey.SessionId,
@@ -26,7 +26,7 @@ func (traceKey *TraceKey) EncodeLexicographically() ([]byte, error) {
 }
 
 func (traceKey *TraceKey) DecodeLexicographically(reader *bytes.Buffer) error {
-	return key.Read(
+	return lex.Read(
 		reader,
 		&traceKey.NodeId,
 		&traceKey.AnonymizationContext,
@@ -68,14 +68,14 @@ type SessionKey struct {
 }
 
 func (sessionKey *SessionKey) EncodeLexicographically() ([]byte, error) {
-	return key.Encode(
+	return lex.Encode(
 		sessionKey.NodeId,
 		sessionKey.AnonymizationContext,
 		sessionKey.SessionId)
 }
 
 func (sessionKey *SessionKey) DecodeLexicographically(reader *bytes.Buffer) error {
-	return key.Read(
+	return lex.Read(
 		reader,
 		&sessionKey.NodeId,
 		&sessionKey.AnonymizationContext,
@@ -133,7 +133,7 @@ func calculateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	var firstKey, lastKey, expectedTraceKey *TraceKey
 	for record := range inputChan {
 		var traceKey TraceKey
-		key.DecodeOrDie(record.Key, &traceKey)
+		lex.DecodeOrDie(record.Key, &traceKey)
 		expectedNextTraceKey := TraceKey{
 			NodeId:               traceKey.NodeId,
 			AnonymizationContext: traceKey.AnonymizationContext,
@@ -144,8 +144,8 @@ func calculateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 		if !traceKey.Equal(expectedTraceKey) {
 			if firstKey != nil {
 				outputChan <- &store.Record{
-					Key:   key.EncodeOrDie(firstKey),
-					Value: key.EncodeOrDie(lastKey),
+					Key:   lex.EncodeOrDie(firstKey),
+					Value: lex.EncodeOrDie(lastKey),
 				}
 			}
 			firstKey = &traceKey
@@ -155,8 +155,8 @@ func calculateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	}
 	if firstKey != nil {
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(firstKey),
-			Value: key.EncodeOrDie(lastKey),
+			Key:   lex.EncodeOrDie(firstKey),
+			Value: lex.EncodeOrDie(lastKey),
 		}
 	}
 }
@@ -166,15 +166,15 @@ func consolidateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	var currentSessionKey *SessionKey
 	for record := range inputChan {
 		var beginKey, endKey TraceKey
-		key.DecodeOrDie(record.Key, &beginKey)
-		key.DecodeOrDie(record.Value, &endKey)
+		lex.DecodeOrDie(record.Key, &beginKey)
+		lex.DecodeOrDie(record.Value, &endKey)
 		sessionKey := beginKey.SessionKey()
 
 		if !sessionKey.Equal(currentSessionKey) || beginKey.SequenceNumber != lastEndKey.SequenceNumber+1 {
 			if firstBeginKey != nil && lastEndKey != nil {
 				outputChan <- &store.Record{
-					Key:   key.EncodeOrDie(firstBeginKey),
-					Value: key.EncodeOrDie(lastEndKey),
+					Key:   lex.EncodeOrDie(firstBeginKey),
+					Value: lex.EncodeOrDie(lastEndKey),
 				}
 			}
 			firstBeginKey = &beginKey
@@ -184,8 +184,8 @@ func consolidateTraceKeyRanges(inputChan, outputChan chan *store.Record) {
 	}
 	if firstBeginKey != nil && lastEndKey != nil {
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(firstBeginKey),
-			Value: key.EncodeOrDie(lastEndKey),
+			Key:   lex.EncodeOrDie(firstBeginKey),
+			Value: lex.EncodeOrDie(lastEndKey),
 		}
 	}
 }
@@ -203,11 +203,11 @@ func sessions(inputChan, outputChan chan *store.Record) {
 	var currentSession *SessionKey
 	for record := range inputChan {
 		var session SessionKey
-		key.DecodeOrDie(record.Key, &session)
+		lex.DecodeOrDie(record.Key, &session)
 		if !session.Equal(currentSession) {
 			if currentSession != nil {
 				outputChan <- &store.Record{
-					Key: key.EncodeOrDie(currentSession),
+					Key: lex.EncodeOrDie(currentSession),
 				}
 			}
 			currentSession = &session
@@ -215,7 +215,7 @@ func sessions(inputChan, outputChan chan *store.Record) {
 	}
 	if currentSession != nil {
 		outputChan <- &store.Record{
-			Key: key.EncodeOrDie(currentSession),
+			Key: lex.EncodeOrDie(currentSession),
 		}
 	}
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func pipelineAvailability(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineAvailability(dbRoot string, workers int) transformer.Pipeline {
 	flagset := flag.NewFlagSet("availability", flag.ExitOnError)
 	jsonOutput := flagset.String("json_output", "/dev/null", "Write availiability in JSON format to this file.")
 	flagset.Parse(flag.Args()[2:])
@@ -34,7 +34,7 @@ func pipelineAvailability(dbRoot string, workers int) []transformer.PipelineStag
 		workers)
 }
 
-func pipelineBytesPerDevice(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineBytesPerDevice(dbRoot string, workers int) transformer.Pipeline {
 	return passive.BytesPerDevicePipeline(
 		store.NewLevelDbStore(filepath.Join(dbRoot, "traces")),
 		store.NewLevelDbStore(filepath.Join(dbRoot, "consistent-ranges")),
@@ -53,7 +53,7 @@ func pipelineBytesPerDevice(dbRoot string, workers int) []transformer.PipelineSt
 		workers)
 }
 
-func pipelineBytesPerDomain(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineBytesPerDomain(dbRoot string, workers int) transformer.Pipeline {
 	stores := passive.BytesPerDomainPipelineStores{
 		Traces:                     store.NewLevelDbStore(filepath.Join(dbRoot, "traces")),
 		AvailabilityIntervals:      store.NewLevelDbStore(filepath.Join(dbRoot, "consistent-ranges")),
@@ -82,7 +82,7 @@ func pipelineBytesPerDomain(dbRoot string, workers int) []transformer.PipelineSt
 	return passive.BytesPerDomainPipeline(&stores, workers)
 }
 
-func pipelineBytesPerMinute(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineBytesPerMinute(dbRoot string, workers int) transformer.Pipeline {
 	return passive.BytesPerMinutePipeline(
 		store.NewLevelDbStore(filepath.Join(dbRoot, "traces")),
 		store.NewLevelDbStore(filepath.Join(dbRoot, "bytesperminute-mapped")),
@@ -94,7 +94,7 @@ func pipelineBytesPerMinute(dbRoot string, workers int) []transformer.PipelineSt
 		workers)
 }
 
-func pipelineFilterNode(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineFilterNode(dbRoot string, workers int) transformer.Pipeline {
 	flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 	nodeId := flagset.String("node_id", "OWC43DC7B0AE78", "Retain only data from this router.")
 	flagset.Parse(flag.Args()[2:])
@@ -109,7 +109,7 @@ func pipelineFilterNode(dbRoot string, workers int) []transformer.PipelineStage 
 	}
 }
 
-func pipelineFilterDates(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineFilterDates(dbRoot string, workers int) transformer.Pipeline {
 	flagset := flag.NewFlagSet("filter", flag.ExitOnError)
 	sessionStartDate := flagset.String("session_start_date", "20120301", "Retain only session starting after this date, in YYYYMMDD format.")
 	sessionEndDate := flagset.String("session_end_date", "20120401", "Retain only session starting before this date, in YYYYMMDD format.")
@@ -131,7 +131,7 @@ func pipelineFilterDates(dbRoot string, workers int) []transformer.PipelineStage
 		store.NewLevelDbStore(filepath.Join(dbRoot, fmt.Sprintf("filtered-%s-%s", *sessionStartDate, *sessionEndDate))))
 }
 
-func pipelineIndex(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineIndex(dbRoot string, workers int) transformer.Pipeline {
 	flagset := flag.NewFlagSet("index", flag.ExitOnError)
 	tarballsPath := flagset.String("tarballs_path", "/data/users/sburnett/passive-organized", "Read tarballs from this directory.")
 	flagset.Parse(flag.Args()[2:])
@@ -141,7 +141,7 @@ func pipelineIndex(dbRoot string, workers int) []transformer.PipelineStage {
 	return passive.IndexTarballsPipeline(*tarballsPath, tarnamesStore, tarnamesIndexedStore, tracesStore, workers)
 }
 
-func pipelineLookupsPerDevice(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineLookupsPerDevice(dbRoot string, workers int) transformer.Pipeline {
 	return passive.LookupsPerDevicePipeline(
 		store.NewLevelDbStore(filepath.Join(dbRoot, "traces")),
 		store.NewLevelDbStore(filepath.Join(dbRoot, "consistent-ranges")),
@@ -153,7 +153,7 @@ func pipelineLookupsPerDevice(dbRoot string, workers int) []transformer.Pipeline
 		workers)
 }
 
-func pipelineStatistics(dbRoot string, workers int) []transformer.PipelineStage {
+func pipelineStatistics(dbRoot string, workers int) transformer.Pipeline {
 	flagset := flag.NewFlagSet("statistics", flag.ExitOnError)
 	jsonOutput := flagset.String("json_output", "/dev/null", "Write statistics in JSON format to this file.")
 	flagset.Parse(flag.Args()[2:])

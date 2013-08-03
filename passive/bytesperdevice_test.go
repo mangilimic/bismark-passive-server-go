@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -55,8 +55,8 @@ func runBytesPerDevicePipeline(consistentRanges []*store.Record, allTraces ...ma
 		}
 		var nodeId, macAddress string
 		var timestamp, count int64
-		key.DecodeOrDie(record.Key, &nodeId, &macAddress, &timestamp)
-		key.DecodeOrDie(record.Value, &count)
+		lex.DecodeOrDie(record.Key, &nodeId, &macAddress, &timestamp)
+		lex.DecodeOrDie(record.Value, &count)
 		fmt.Printf("%s,%s,%d: %d\n", nodeId, macAddress, timestamp, count)
 	}
 	bytesPerDeviceStore.EndReading()
@@ -86,12 +86,12 @@ func ExampleBytesPerDevice_single() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
 	}
 
 	runBytesPerDevicePipeline(consistentRanges, records)
@@ -142,21 +142,21 @@ func ExampleBytesPerDevice_missingSequenceNumber() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(2), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(2), int32(2)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(2), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(2), int32(2)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(3))): trace3,
-		string(key.EncodeOrDie("node1", "anon1", int64(2), int32(0))): trace1,
-		string(key.EncodeOrDie("node1", "anon1", int64(2), int32(1))): trace2,
-		string(key.EncodeOrDie("node1", "anon1", int64(2), int32(2))): trace3,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(3))): trace3,
+		string(lex.EncodeOrDie("node1", "anon1", int64(2), int32(0))): trace1,
+		string(lex.EncodeOrDie("node1", "anon1", int64(2), int32(1))): trace2,
+		string(lex.EncodeOrDie("node1", "anon1", int64(2), int32(2))): trace3,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -190,12 +190,12 @@ func ExampleBytesPerDevice_missingMac() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -215,12 +215,12 @@ func ExampleBytesPerDevice_missingFlow() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -255,12 +255,12 @@ func ExampleBytesPerDevice_roundToHour() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -298,12 +298,12 @@ func ExampleBytesPerDevice_multipleHours() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -347,12 +347,12 @@ func ExampleBytesPerDevice_multipleFlows() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -399,12 +399,12 @@ func ExampleBytesPerDevice_twoMacsPerFlow() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -467,14 +467,14 @@ func ExampleBytesPerDevice_maskFlows() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(2))): trace3,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(2))): trace3,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -530,13 +530,13 @@ func ExampleBytesPerDevice_maskMacAndFlows() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -585,13 +585,13 @@ func ExampleBytesPerDevice_macBoundAtStartOfFlow() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -646,13 +646,13 @@ func ExampleBytesPerDevice_maskMac() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -706,17 +706,17 @@ func ExampleBytesPerDevice_multipleNodes() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
 		},
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
-		string(key.EncodeOrDie("node1", "anon0", int64(0), int32(0))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
+		string(lex.EncodeOrDie("node1", "anon0", int64(0), int32(0))): trace2,
 	}
 	runBytesPerDevicePipeline(consistentRanges, records)
 
@@ -767,16 +767,16 @@ func ExampleBytesPerDevice_multipleSessions() {
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
 		},
 	}
 	firstRecords := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): trace1,
 	}
 	secondRecords := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(2))): trace3,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(2))): trace3,
 	}
 	runBytesPerDevicePipeline(consistentRanges, firstRecords, secondRecords)
 

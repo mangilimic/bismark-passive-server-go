@@ -1,8 +1,8 @@
 package passive
 
 import (
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -32,11 +32,11 @@ func (parameters filterSessions) Do(inputChan, outputChan chan *store.Record) {
 	var currentSession *SessionKey
 	for record := range inputChan {
 		var session SessionKey
-		key.DecodeOrDie(record.Key, &session)
+		lex.DecodeOrDie(record.Key, &session)
 		if record.DatabaseIndex == 0 {
 			var startKey, endKey TraceKey
-			key.DecodeOrDie(record.Key, &startKey)
-			key.DecodeOrDie(record.Value, &endKey)
+			lex.DecodeOrDie(record.Key, &startKey)
+			lex.DecodeOrDie(record.Value, &endKey)
 			useCurrentSession = startKey.SessionId <= parameters.SessionEndTime && endKey.SessionId+traceDuration*int64(endKey.SequenceNumber) >= parameters.SessionStartTime && startKey.SequenceNumber == 0
 			currentSession = &session
 			continue

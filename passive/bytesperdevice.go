@@ -7,8 +7,8 @@ import (
 
 	"code.google.com/p/goprotobuf/proto"
 	_ "github.com/bmizerany/pq"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -71,8 +71,8 @@ func mapTraceToAddressTable(traceKey *TraceKey, trace *Trace, outputChan chan *s
 			continue
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.IpAddress, traceKey.SequenceNumber),
-			Value: key.EncodeOrDie(*entry.MacAddress),
+			Key:   lex.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, *entry.IpAddress, traceKey.SequenceNumber),
+			Value: lex.EncodeOrDie(*entry.MacAddress),
 		}
 	}
 }
@@ -92,8 +92,8 @@ func mapTraceToFlowTable(traceKey *TraceKey, trace *Trace, outputChan chan *stor
 	}
 	for ipAddress, ids := range flowIds {
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, ipAddress, traceKey.SequenceNumber),
-			Value: key.EncodeOrDie(ids),
+			Key:   lex.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, ipAddress, traceKey.SequenceNumber),
+			Value: lex.EncodeOrDie(ids),
 		}
 	}
 }
@@ -121,15 +121,15 @@ func mapTraceToBytesPerTimestamp(traceKey *TraceKey, trace *Trace, outputChan ch
 			idx++
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber),
-			Value: key.EncodeOrDie(timestamps, sizes),
+			Key:   lex.EncodeOrDie(traceKey.NodeId, traceKey.AnonymizationContext, traceKey.SessionId, flowId, traceKey.SequenceNumber),
+			Value: lex.EncodeOrDie(timestamps, sizes),
 		}
 	}
 }
 
 func bytesPerDeviceMapper(record *store.Record, outputChans ...chan *store.Record) {
 	var traceKey TraceKey
-	key.DecodeOrDie(record.Key, &traceKey)
+	lex.DecodeOrDie(record.Key, &traceKey)
 	var trace Trace
 	if err := proto.Unmarshal(record.Value, &trace); err != nil {
 		panic(err)
@@ -156,12 +156,12 @@ func joinMacAndFlowId(inputChan, outputChan chan *store.Record) {
 				continue
 			}
 			var sequenceNumber int32
-			key.DecodeOrDie(record.Key, &sequenceNumber)
+			lex.DecodeOrDie(record.Key, &sequenceNumber)
 			var flowIds []int32
-			key.DecodeOrDie(record.Value, &flowIds)
+			lex.DecodeOrDie(record.Value, &flowIds)
 			for _, flowId := range flowIds {
 				outputChan <- &store.Record{
-					Key: key.Join(key.EncodeOrDie(&session, flowId, sequenceNumber), currentMacAddress),
+					Key: lex.Concatenate(lex.EncodeOrDie(&session, flowId, sequenceNumber), currentMacAddress),
 				}
 			}
 		}
@@ -177,12 +177,12 @@ func flattenMacAddresses(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var macAddress []byte
-			key.DecodeOrDie(record.Key, &macAddress)
+			lex.DecodeOrDie(record.Key, &macAddress)
 			macAddresses = append(macAddresses, macAddress)
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(&session, flowId, sequenceNumber),
-			Value: key.EncodeOrDie(macAddresses),
+			Key:   lex.EncodeOrDie(&session, flowId, sequenceNumber),
+			Value: lex.EncodeOrDie(macAddresses),
 		}
 	}
 }
@@ -196,7 +196,7 @@ func joinMacAndSizes(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			if record.DatabaseIndex == 0 {
-				key.DecodeOrDie(record.Value, &currentMacAddresses)
+				lex.DecodeOrDie(record.Value, &currentMacAddresses)
 				continue
 			}
 			if currentMacAddresses == nil {
@@ -204,9 +204,9 @@ func joinMacAndSizes(inputChan, outputChan chan *store.Record) {
 			}
 
 			var sequenceNumber int32
-			key.DecodeOrDie(record.Key, &sequenceNumber)
+			lex.DecodeOrDie(record.Key, &sequenceNumber)
 			var timestamps, sizes []int64
-			key.DecodeOrDie(record.Value, &timestamps, &sizes)
+			lex.DecodeOrDie(record.Value, &timestamps, &sizes)
 			if len(timestamps) != len(sizes) {
 				panic(fmt.Errorf("timestamps and sizes must be the same size"))
 			}
@@ -214,8 +214,8 @@ func joinMacAndSizes(inputChan, outputChan chan *store.Record) {
 			for _, currentMacAddress := range currentMacAddresses {
 				for idx, timestamp := range timestamps {
 					outputChan <- &store.Record{
-						Key:   key.EncodeOrDie(&session, currentMacAddress, timestamp, flowId, sequenceNumber),
-						Value: key.EncodeOrDie(sizes[idx]),
+						Key:   lex.EncodeOrDie(&session, currentMacAddress, timestamp, flowId, sequenceNumber),
+						Value: lex.EncodeOrDie(sizes[idx]),
 					}
 				}
 			}
@@ -233,12 +233,12 @@ func reduceBytesPerDeviceSession(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var size int64
-			key.DecodeOrDie(record.Value, &size)
+			lex.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(session.NodeId, macAddress, timestamp, session.AnonymizationContext, session.SessionId),
-			Value: key.EncodeOrDie(totalSize),
+			Key:   lex.EncodeOrDie(session.NodeId, macAddress, timestamp, session.AnonymizationContext, session.SessionId),
+			Value: lex.EncodeOrDie(totalSize),
 		}
 	}
 }
@@ -252,12 +252,12 @@ func reduceBytesPerDevice(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var size int64
-			key.DecodeOrDie(record.Value, &size)
+			lex.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(nodeId, macAddress, timestamp),
-			Value: key.EncodeOrDie(totalSize),
+			Key:   lex.EncodeOrDie(nodeId, macAddress, timestamp),
+			Value: lex.EncodeOrDie(totalSize),
 		}
 	}
 }
@@ -308,8 +308,8 @@ func (store *BytesPerDevicePostgresStore) WriteRecord(record *store.Record) erro
 	var nodeId, macAddress []byte
 	var timestamp, size int64
 
-	key.DecodeOrDie(record.Key, &nodeId, &macAddress, &timestamp)
-	key.DecodeOrDie(record.Value, &size)
+	lex.DecodeOrDie(record.Key, &nodeId, &macAddress, &timestamp)
+	lex.DecodeOrDie(record.Value, &size)
 
 	if _, err := store.statement.Exec(nodeId, macAddress, time.Unix(timestamp, 0), size); err != nil {
 		return err

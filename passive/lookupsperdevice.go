@@ -4,8 +4,8 @@ import (
 	"regexp"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -46,7 +46,7 @@ func lookupsPerDeviceMapper(record *store.Record, outputChan chan *store.Record)
 	}
 
 	var traceKey TraceKey
-	key.DecodeOrDie(record.Key, &traceKey)
+	lex.DecodeOrDie(record.Key, &traceKey)
 	var trace Trace
 	if err := proto.Unmarshal(record.Value, &trace); err != nil {
 		panic(err)
@@ -87,8 +87,8 @@ func lookupsPerDeviceMapper(record *store.Record, outputChan chan *store.Record)
 	for addressId, domainsMap := range allDomains {
 		for domain, count := range domainsMap {
 			outputChan <- &store.Record{
-				Key:   key.EncodeOrDie(traceKey.SessionKey(), addressId, traceKey.SequenceNumber, domain),
-				Value: key.EncodeOrDie(count),
+				Key:   lex.EncodeOrDie(traceKey.SessionKey(), addressId, traceKey.SequenceNumber, domain),
+				Value: lex.EncodeOrDie(count),
 			}
 		}
 	}
@@ -106,16 +106,16 @@ func joinMacWithLookups(inputChan, outputChan chan *store.Record) {
 			record := grouper.Read()
 			switch record.DatabaseIndex {
 			case 0:
-				key.DecodeOrDie(record.Value, &macAddress)
+				lex.DecodeOrDie(record.Value, &macAddress)
 			case 1:
 				if macAddress != nil {
 					var (
 						sequenceNumber int32
 						domain         string
 					)
-					key.DecodeOrDie(record.Key, &sequenceNumber, &domain)
+					lex.DecodeOrDie(record.Key, &sequenceNumber, &domain)
 					outputChan <- &store.Record{
-						Key:   key.EncodeOrDie(session.NodeId, macAddress, domain, session.AnonymizationContext, session.SessionId, sequenceNumber),
+						Key:   lex.EncodeOrDie(session.NodeId, macAddress, domain, session.AnonymizationContext, session.SessionId, sequenceNumber),
 						Value: record.Value,
 					}
 				}
@@ -132,12 +132,12 @@ func flattenLookupsToNodeAndMac(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var count int64
-			key.DecodeOrDie(record.Value, &count)
+			lex.DecodeOrDie(record.Value, &count)
 			totalCount += count
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(nodeId, macAddress, domain),
-			Value: key.EncodeOrDie(totalCount),
+			Key:   lex.EncodeOrDie(nodeId, macAddress, domain),
+			Value: lex.EncodeOrDie(totalCount),
 		}
 	}
 }
@@ -154,16 +154,16 @@ func flattenLookupsToNodeMacAndTimestamp(inputChan, outputChan chan *store.Recor
 				sessionId            int64
 				sequenceNumber       int32
 			)
-			key.DecodeOrDie(record.Key, &anonymizationContext, &sessionId, &sequenceNumber)
+			lex.DecodeOrDie(record.Key, &anonymizationContext, &sessionId, &sequenceNumber)
 			var count int64
-			key.DecodeOrDie(record.Value, &count)
+			lex.DecodeOrDie(record.Value, &count)
 			timestamp := truncateTimestampToHour(sessionId + convertSecondsToMicroseconds(30)*int64(sequenceNumber))
 			totalCounts[timestamp] += count
 		}
 		for timestamp, totalCount := range totalCounts {
 			outputChan <- &store.Record{
-				Key:   key.EncodeOrDie(nodeId, macAddress, domain, timestamp),
-				Value: key.EncodeOrDie(totalCount),
+				Key:   lex.EncodeOrDie(nodeId, macAddress, domain, timestamp),
+				Value: lex.EncodeOrDie(totalCount),
 			}
 		}
 	}

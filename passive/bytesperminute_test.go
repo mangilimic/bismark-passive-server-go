@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -50,8 +50,8 @@ func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
 		}
 		var nodeId string
 		var timestamp, count int64
-		key.DecodeOrDie(record.Key, &nodeId, &timestamp)
-		key.DecodeOrDie(record.Value, &count)
+		lex.DecodeOrDie(record.Key, &nodeId, &timestamp)
+		lex.DecodeOrDie(record.Value, &count)
 		fmt.Printf("%s,%d: %d\n", nodeId, timestamp, count)
 	}
 	bytesPerMinuteStore.EndReading()
@@ -67,8 +67,8 @@ func ExampleBytesPerMinute_simple() {
 	trace2.PacketSeries[0] = makePacketSeriesEntry(50, 60)
 	trace2.PacketSeries[1] = makePacketSeriesEntry(70, 80)
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
 	}
 	runBytesPerMinutePipeline(records)
 
@@ -86,8 +86,8 @@ func ExampleBytesPerMinute_twoMinutes() {
 	trace2.PacketSeries[0] = makePacketSeriesEntry(50*int64(time.Second/time.Microsecond), 60)
 	trace2.PacketSeries[1] = makePacketSeriesEntry(70*int64(time.Second/time.Microsecond), 80)
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
 	}
 	runBytesPerMinutePipeline(records)
 
@@ -101,9 +101,9 @@ func ExampleBytesPerMinute_multipleSessions() {
 	trace1.PacketSeries = make([]*PacketSeriesEntry, 1)
 	trace1.PacketSeries[0] = makePacketSeriesEntry(0, 20)
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", "session1", int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon1", "session0", int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", "session1", int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon1", "session0", int32(0))): trace1,
 	}
 	runBytesPerMinutePipeline(records)
 
@@ -116,8 +116,8 @@ func ExampleBytesPerMinute_multipleNodes() {
 	trace1.PacketSeries = make([]*PacketSeriesEntry, 1)
 	trace1.PacketSeries[0] = makePacketSeriesEntry(0, 20)
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
-		string(key.EncodeOrDie("node1", "anon0", "session0", int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
+		string(lex.EncodeOrDie("node1", "anon0", "session0", int32(0))): trace1,
 	}
 	runBytesPerMinutePipeline(records)
 
@@ -144,12 +144,12 @@ func ExampleBytesPerMinute_multipleRuns() {
 	trace4.PacketSeries[0] = makePacketSeriesEntry(50*int64(time.Second/time.Microsecond), 60)
 	trace4.PacketSeries[1] = makePacketSeriesEntry(70*int64(time.Second/time.Microsecond), 80)
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(2))): trace3,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(0))): trace1,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(2))): trace3,
 	}
 	moreRecords := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
-		string(key.EncodeOrDie("node0", "anon0", "session0", int32(3))): trace4,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(1))): trace2,
+		string(lex.EncodeOrDie("node0", "anon0", "session0", int32(3))): trace4,
 	}
 	runBytesPerMinutePipeline(records, moreRecords)
 

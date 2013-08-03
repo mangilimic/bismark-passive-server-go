@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -52,7 +52,7 @@ func traceKey(trace *Trace) []byte {
 	if trace.AnonymizationSignature != nil {
 		anonymizationContext = *trace.AnonymizationSignature
 	}
-	return key.EncodeOrDie(
+	return lex.EncodeOrDie(
 		*trace.NodeId,
 		anonymizationContext,
 		*trace.ProcessStartTimeMicroseconds,
@@ -153,10 +153,10 @@ func IndexTarballs(inputRecords []*store.Record, outputChans ...chan *store.Reco
 	tarnamesChan := outputChans[1]
 
 	var tarPath string
-	key.DecodeOrDie(inputRecords[0].Key, &tarPath)
+	lex.DecodeOrDie(inputRecords[0].Key, &tarPath)
 	if indexTarball(tarPath, tracesChan) {
 		tarnamesChan <- &store.Record{
-			Key: key.EncodeOrDie(tarPath),
+			Key: lex.EncodeOrDie(tarPath),
 		}
 	}
 }

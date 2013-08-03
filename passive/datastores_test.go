@@ -3,7 +3,7 @@ package passive
 import (
 	"fmt"
 
-	"github.com/sburnett/transformer/key"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -15,7 +15,7 @@ func makeRecordToInclude(nodeId string, sequenceNumber int32) *store.Record {
 		SequenceNumber:       sequenceNumber,
 	}
 	return &store.Record{
-		Key:   key.EncodeOrDie(&traceKey),
+		Key:   lex.EncodeOrDie(&traceKey),
 		Value: []byte{},
 	}
 }
@@ -31,7 +31,7 @@ func runIncludeNodes(records store.Reader) {
 			break
 		}
 		var traceKey TraceKey
-		key.DecodeOrDie(record.Key, &traceKey)
+		lex.DecodeOrDie(record.Key, &traceKey)
 		fmt.Printf("%s %d\n", traceKey.NodeId, traceKey.SequenceNumber)
 	}
 	records.EndReading()

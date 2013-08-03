@@ -3,8 +3,8 @@ package passive
 import (
 	"fmt"
 
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -16,7 +16,7 @@ func makeSessionRecord(nodeId string, sessionId int64, sequenceNumber int32) *st
 		SequenceNumber:       sequenceNumber,
 	}
 	return &store.Record{
-		Key:   key.EncodeOrDie(&traceKey),
+		Key:   lex.EncodeOrDie(&traceKey),
 		Value: []byte{},
 	}
 }
@@ -35,8 +35,8 @@ func makeRangeRecord(nodeId string, sessionId int64, firstSequenceNumber, lastSe
 		SequenceNumber:       lastSequenceNumber,
 	}
 	return &store.Record{
-		Key:   key.EncodeOrDie(&traceKey),
-		Value: key.EncodeOrDie(&traceValue),
+		Key:   lex.EncodeOrDie(&traceKey),
+		Value: lex.EncodeOrDie(&traceValue),
 	}
 }
 
@@ -53,7 +53,7 @@ func runFilterSessionsPipeline(startSecs, endSecs int64, tracesStore, traceKeyRa
 			break
 		}
 		var traceKey TraceKey
-		key.DecodeOrDie(record.Key, &traceKey)
+		lex.DecodeOrDie(record.Key, &traceKey)
 		fmt.Printf("%s %d %d\n", traceKey.NodeId, traceKey.SessionId, traceKey.SequenceNumber)
 	}
 	filteredStore.EndReading()

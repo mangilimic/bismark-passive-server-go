@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -56,8 +56,8 @@ func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*st
 			nodeId, macAddress, domain string
 			count                      int64
 		)
-		key.DecodeOrDie(record.Key, &nodeId, &macAddress, &domain)
-		key.DecodeOrDie(record.Value, &count)
+		lex.DecodeOrDie(record.Key, &nodeId, &macAddress, &domain)
+		lex.DecodeOrDie(record.Value, &count)
 		fmt.Printf("%s,%s,%s: %d\n", nodeId, macAddress, domain, count)
 	}
 	lookupsPerDeviceStore.EndReading()
@@ -76,8 +76,8 @@ func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*st
 			nodeId, macAddress, domain string
 			timestamp, count           int64
 		)
-		key.DecodeOrDie(record.Key, &nodeId, &macAddress, &domain, &timestamp)
-		key.DecodeOrDie(record.Value, &count)
+		lex.DecodeOrDie(record.Key, &nodeId, &macAddress, &domain, &timestamp)
+		lex.DecodeOrDie(record.Value, &count)
 		fmt.Printf("%s,%s,%s,%d: %d\n", nodeId, macAddress, domain, timestamp, count)
 	}
 	lookupsPerDevicePerHourStore.EndReading()
@@ -107,16 +107,16 @@ func ExampleLookupsPerDevice_oneDomain() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -142,16 +142,16 @@ func ExampleLookupsPerDevice_oneCname() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -187,16 +187,16 @@ func ExampleLookupsPerDevice_matchDomain() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -227,17 +227,17 @@ func ExampleLookupsPerDevice_multipleAddresses() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(1), int32(0))): string(key.EncodeOrDie("mac2")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(1), int32(0))): string(lex.EncodeOrDie("mac2")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -272,16 +272,16 @@ func ExampleLookupsPerDevice_anonymization() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -308,16 +308,16 @@ func ExampleLookupsPerDevice_multipleLookups() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -341,18 +341,18 @@ func ExampleLookupsPerDevice_multipleTraces() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))):   trace,
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(1))):   trace,
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(120))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))):   trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(1))):   trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(120))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(120)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(120)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)
@@ -377,18 +377,18 @@ func ExampleLookupsPerDevice_aliasAddresses() {
 		},
 	}
 	traces := map[string]Trace{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(1))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0))): trace,
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(1))): trace,
 	}
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon1", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node1", "anon1", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon1", int64(0), int32(1)),
 		},
 	}
 	addressIdStore := map[string]string{
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(key.EncodeOrDie("mac1")),
-		string(key.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(1))): string(key.EncodeOrDie("mac2")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(0))): string(lex.EncodeOrDie("mac1")),
+		string(lex.EncodeOrDie("node1", "anon1", int64(0), int32(0), int32(1))): string(lex.EncodeOrDie("mac2")),
 	}
 
 	runLookupsPerDevicePipeline(traces, consistentRanges, addressIdStore)

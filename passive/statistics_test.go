@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -66,14 +66,14 @@ func runAggregateStatisticsPipeline(consistentRanges []*store.Record, allTraces 
 func ExampleAggregateStatisticsPipeline() {
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(2))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 1, 4, 5),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(2))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 1, 4, 5),
 	}
 	runAggregateStatisticsPipeline(consistentRanges, records)
 
@@ -84,19 +84,19 @@ func ExampleAggregateStatisticsPipeline() {
 func ExampleAggregateStatisticsPipeline_multipleNodes() {
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
 		&store.Record{
-			Key:   key.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node1", "anon0", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node1", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node1", "anon0", int64(0), int32(1)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
-		string(key.EncodeOrDie("node1", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
-		string(key.EncodeOrDie("node1", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+		string(lex.EncodeOrDie("node1", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+		string(lex.EncodeOrDie("node1", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
 	}
 	runAggregateStatisticsPipeline(consistentRanges, records)
 
@@ -107,19 +107,19 @@ func ExampleAggregateStatisticsPipeline_multipleNodes() {
 func ExampleAggregateStatisticsPipeline_multipleSessions() {
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(1)),
 		},
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(1), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(1), int32(1)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(1), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(1), int32(1)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
-		string(key.EncodeOrDie("node0", "anon0", int64(1), int32(0))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
-		string(key.EncodeOrDie("node0", "anon0", int64(1), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+		string(lex.EncodeOrDie("node0", "anon0", int64(1), int32(0))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
+		string(lex.EncodeOrDie("node0", "anon0", int64(1), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 0, 1, 4, 5),
 	}
 	runAggregateStatisticsPipeline(consistentRanges, records)
 
@@ -130,16 +130,16 @@ func ExampleAggregateStatisticsPipeline_multipleSessions() {
 func ExampleAggregateStatisticsPipeline_multipleRuns() {
 	consistentRanges := []*store.Record{
 		&store.Record{
-			Key:   key.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
-			Value: key.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
+			Key:   lex.EncodeOrDie("node0", "anon0", int64(0), int32(0)),
+			Value: lex.EncodeOrDie("node0", "anon0", int64(0), int32(2)),
 		},
 	}
 	records := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(0))): makeTraceWithStatistics([]int{2, 2, 2}, 1, 0, 0, 2, 3),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(1))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 0, 3, 4),
 	}
 	moreRecords := map[string]Trace{
-		string(key.EncodeOrDie("node0", "anon0", int64(0), int32(2))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 1, 4, 5),
+		string(lex.EncodeOrDie("node0", "anon0", int64(0), int32(2))): makeTraceWithStatistics([]int{1, 2}, 0, 1, 1, 4, 5),
 	}
 	runAggregateStatisticsPipeline(consistentRanges, records, moreRecords)
 

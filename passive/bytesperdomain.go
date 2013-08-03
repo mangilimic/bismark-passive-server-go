@@ -9,8 +9,8 @@ import (
 
 	"code.google.com/p/goprotobuf/proto"
 	_ "github.com/bmizerany/pq"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -142,8 +142,8 @@ func mapTraceToAddressIdTable(traceKey *TraceKey, trace *Trace, outputChan chan 
 		}
 		addressId := computeAddressIdFromAddressTableOffset(idx)
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(traceKey.SessionKey(), addressId, traceKey.SequenceNumber),
-			Value: key.EncodeOrDie(*entry.MacAddress),
+			Key:   lex.EncodeOrDie(traceKey.SessionKey(), addressId, traceKey.SequenceNumber),
+			Value: lex.EncodeOrDie(*entry.MacAddress),
 		}
 	}
 }
@@ -167,7 +167,7 @@ func mapTraceToARecordTable(traceKey *TraceKey, trace *Trace, outputChan chan *s
 		packetTimestamp := lookupPacketTimestampFromId(*entry.PacketId, trace)
 		ttl := convertSecondsToMicroseconds(int64(*entry.Ttl))
 		outputChan <- &store.Record{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Domain, *entry.Anonymized, packetTimestamp, packetTimestamp+ttl, *entry.IpAddress),
+			Key: lex.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Domain, *entry.Anonymized, packetTimestamp, packetTimestamp+ttl, *entry.IpAddress),
 		}
 	}
 }
@@ -183,7 +183,7 @@ func mapTraceToCnameRecordTable(traceKey *TraceKey, trace *Trace, outputChan cha
 		packetTimestamp := lookupPacketTimestampFromId(*entry.PacketId, trace)
 		ttl := convertSecondsToMicroseconds(int64(*entry.Ttl))
 		outputChan <- &store.Record{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Cname, *entry.CnameAnonymized, packetTimestamp, packetTimestamp+ttl, *entry.Domain),
+			Key: lex.EncodeOrDie(traceKey.SessionKey(), *entry.AddressId, traceKey.SequenceNumber, *entry.Cname, *entry.CnameAnonymized, packetTimestamp, packetTimestamp+ttl, *entry.Domain),
 		}
 	}
 }
@@ -219,10 +219,10 @@ func mapTraceToFlowIpsTable(traceKey *TraceKey, trace *Trace, outputChan chan *s
 			continue
 		}
 		outputChan <- &store.Record{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.SourceIp, traceKey.SequenceNumber, *entry.DestinationIp, timestamp, *entry.FlowId),
+			Key: lex.EncodeOrDie(traceKey.SessionKey(), *entry.SourceIp, traceKey.SequenceNumber, *entry.DestinationIp, timestamp, *entry.FlowId),
 		}
 		outputChan <- &store.Record{
-			Key: key.EncodeOrDie(traceKey.SessionKey(), *entry.DestinationIp, traceKey.SequenceNumber, *entry.SourceIp, timestamp, *entry.FlowId),
+			Key: lex.EncodeOrDie(traceKey.SessionKey(), *entry.DestinationIp, traceKey.SequenceNumber, *entry.SourceIp, timestamp, *entry.FlowId),
 		}
 	}
 }
@@ -233,8 +233,8 @@ func mapTraceToAddressIpTable(traceKey *TraceKey, trace *Trace, outputChan chan 
 			continue
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(traceKey.SessionKey(), *entry.IpAddress, traceKey.SequenceNumber),
-			Value: key.EncodeOrDie(*entry.MacAddress),
+			Key:   lex.EncodeOrDie(traceKey.SessionKey(), *entry.IpAddress, traceKey.SequenceNumber),
+			Value: lex.EncodeOrDie(*entry.MacAddress),
 		}
 	}
 }
@@ -255,8 +255,8 @@ func mapTraceToBytesPerTimestampSharded(traceKey *TraceKey, trace *Trace, output
 	for flowId, timestamps := range flowIdAndTimestampToSize {
 		for timestamp, size := range timestamps {
 			outputChan <- &store.Record{
-				Key:   key.EncodeOrDie(traceKey.SessionKey(), flowId, traceKey.SequenceNumber, timestamp),
-				Value: key.EncodeOrDie(size),
+				Key:   lex.EncodeOrDie(traceKey.SessionKey(), flowId, traceKey.SequenceNumber, timestamp),
+				Value: lex.EncodeOrDie(size),
 			}
 		}
 	}
@@ -265,8 +265,8 @@ func mapTraceToBytesPerTimestampSharded(traceKey *TraceKey, trace *Trace, output
 func mapTraceToWhitelist(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {
 	if traceKey.SequenceNumber == 0 {
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(traceKey.SessionKey()),
-			Value: key.EncodeOrDie(trace.Whitelist),
+			Key:   lex.EncodeOrDie(traceKey.SessionKey()),
+			Value: lex.EncodeOrDie(trace.Whitelist),
 		}
 	}
 }
@@ -275,7 +275,7 @@ type traceMapper func(*TraceKey, *Trace, chan *store.Record)
 
 func bytesPerDomainMapper(record *store.Record, outputChans ...chan *store.Record) {
 	var traceKey TraceKey
-	key.DecodeOrDie(record.Key, &traceKey)
+	lex.DecodeOrDie(record.Key, &traceKey)
 	var trace Trace
 	if err := proto.Unmarshal(record.Value, &trace); err != nil {
 		panic(err)
@@ -311,9 +311,9 @@ func joinAddressIdsWithMacAddresses(inputChan, outputChan chan *store.Record) {
 			case 1:
 				if macAddress != nil {
 					var unusedSequenceNumber int32
-					remainder := key.DecodeOrDie(record.Key, &unusedSequenceNumber)
+					remainder := lex.DecodeOrDie(record.Key, &unusedSequenceNumber)
 					outputChan <- &store.Record{
-						Key: key.Join(key.EncodeOrDie(&session), macAddress, remainder),
+						Key: lex.Concatenate(lex.EncodeOrDie(&session), macAddress, remainder),
 					}
 				}
 			}
@@ -329,13 +329,13 @@ func emitARecords(record *store.Record, outputChan chan *store.Record) {
 		startTimestamp, endTimestamp int64
 		ipAddress                    []byte
 	)
-	key.DecodeOrDie(record.Key, &session, &macAddress, &domain, &anonymized, &startTimestamp, &endTimestamp, &ipAddress)
+	lex.DecodeOrDie(record.Key, &session, &macAddress, &domain, &anonymized, &startTimestamp, &endTimestamp, &ipAddress)
 
 	if anonymized {
 		return
 	}
 	outputChan <- &store.Record{
-		Key: key.EncodeOrDie(&session, domain, macAddress, ipAddress, startTimestamp, endTimestamp),
+		Key: lex.EncodeOrDie(&session, domain, macAddress, ipAddress, startTimestamp, endTimestamp),
 	}
 }
 
@@ -373,7 +373,7 @@ func joinARecordsWithCnameRecords(inputChan, outputChan chan *store.Record) {
 			record := grouper.Read()
 			newStartDnsRecord := dnsRecord{startEvent: true, aRecord: record.DatabaseIndex == 0}
 			newEndDnsRecord := dnsRecord{startEvent: false, aRecord: record.DatabaseIndex == 0}
-			key.DecodeOrDie(record.Key, &newStartDnsRecord.timestamp, &newEndDnsRecord.timestamp, &newStartDnsRecord.value)
+			lex.DecodeOrDie(record.Key, &newStartDnsRecord.timestamp, &newEndDnsRecord.timestamp, &newStartDnsRecord.value)
 			newEndDnsRecord.value = newStartDnsRecord.value
 			allRecords = append(allRecords, &newStartDnsRecord)
 			allRecords = append(allRecords, &newEndDnsRecord)
@@ -402,7 +402,7 @@ func joinARecordsWithCnameRecords(inputChan, outputChan chan *store.Record) {
 						delete(currentAValues, record.value)
 						for domain, timestamp := range currentCnameValues {
 							outputChan <- &store.Record{
-								Key: key.EncodeOrDie(&session, domain, macAddress, record.value, maxInt64(startTimestamp, timestamp), record.timestamp),
+								Key: lex.EncodeOrDie(&session, domain, macAddress, record.value, maxInt64(startTimestamp, timestamp), record.timestamp),
 							}
 						}
 					}
@@ -423,7 +423,7 @@ func joinARecordsWithCnameRecords(inputChan, outputChan chan *store.Record) {
 						delete(currentCnameValues, record.value)
 						for ip, timestamp := range currentAValues {
 							outputChan <- &store.Record{
-								Key: key.EncodeOrDie(&session, record.value, macAddress, ip, maxInt64(startTimestamp, timestamp), record.timestamp),
+								Key: lex.EncodeOrDie(&session, record.value, macAddress, ip, maxInt64(startTimestamp, timestamp), record.timestamp),
 							}
 						}
 					}
@@ -443,14 +443,14 @@ func joinDomainsWithWhitelist(inputChan, outputChan chan *store.Record) {
 
 			switch record.DatabaseIndex {
 			case 0:
-				key.DecodeOrDie(record.Value, &whitelist)
+				lex.DecodeOrDie(record.Value, &whitelist)
 				sort.Sort(sort.StringSlice(whitelist))
 			case 1:
 				if whitelist == nil {
 					continue
 				}
 				var domain string
-				remainder := key.DecodeOrDie(record.Key, &domain)
+				remainder := lex.DecodeOrDie(record.Key, &domain)
 				for i := 0; i < len(domain); i++ {
 					if i > 0 && domain[i-1] != '.' {
 						continue
@@ -460,7 +460,7 @@ func joinDomainsWithWhitelist(inputChan, outputChan chan *store.Record) {
 						continue
 					}
 					outputChan <- &store.Record{
-						Key: key.Join(grouper.CurrentGroupPrefix, remainder, key.EncodeOrDie(whitelist[idx])),
+						Key: lex.Concatenate(grouper.CurrentGroupPrefix, remainder, lex.EncodeOrDie(whitelist[idx])),
 					}
 				}
 			}
@@ -480,7 +480,7 @@ func joinMacWithFlowId(inputChan, outputChan chan *store.Record) {
 			record := grouper.Read()
 			switch record.DatabaseIndex {
 			case 0:
-				key.DecodeOrDie(record.Value, &macAddress)
+				lex.DecodeOrDie(record.Value, &macAddress)
 			case 1:
 				if macAddress != nil {
 					var (
@@ -489,9 +489,9 @@ func joinMacWithFlowId(inputChan, outputChan chan *store.Record) {
 						timestamp      int64
 						flowId         int32
 					)
-					key.DecodeOrDie(record.Key, &sequenceNumber, &remoteIp, &timestamp, &flowId)
+					lex.DecodeOrDie(record.Key, &sequenceNumber, &remoteIp, &timestamp, &flowId)
 					outputChan <- &store.Record{
-						Key: key.EncodeOrDie(&session, macAddress, remoteIp, timestamp, int64(math.MaxInt64), sequenceNumber, flowId),
+						Key: lex.EncodeOrDie(&session, macAddress, remoteIp, timestamp, int64(math.MaxInt64), sequenceNumber, flowId),
 					}
 				}
 			}
@@ -517,7 +517,7 @@ func joinWhitelistedDomainsWithFlows(inputChan, outputChan chan *store.Record) {
 			switch record.DatabaseIndex {
 			case 0:
 				var newEntry timestampsAndDomain
-				key.DecodeOrDie(record.Key, &newEntry.start, &newEntry.end, &newEntry.domain)
+				lex.DecodeOrDie(record.Key, &newEntry.start, &newEntry.end, &newEntry.domain)
 				domains = append(domains, &newEntry)
 			case 1:
 				if domains != nil {
@@ -525,11 +525,11 @@ func joinWhitelistedDomainsWithFlows(inputChan, outputChan chan *store.Record) {
 						timestamp, unusedInfinity int64
 						sequenceNumber, flowId    int32
 					)
-					key.DecodeOrDie(record.Key, &timestamp, &unusedInfinity, &sequenceNumber, &flowId)
+					lex.DecodeOrDie(record.Key, &timestamp, &unusedInfinity, &sequenceNumber, &flowId)
 					for _, entry := range domains {
 						if entry.start <= timestamp && entry.end >= timestamp {
 							outputChan <- &store.Record{
-								Key: key.EncodeOrDie(&session, flowId, sequenceNumber, entry.domain, macAddress),
+								Key: lex.EncodeOrDie(&session, flowId, sequenceNumber, entry.domain, macAddress),
 							}
 						}
 					}
@@ -550,13 +550,13 @@ func groupDomainsAndMacAddresses(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var domain, macAddress []byte
-			key.DecodeOrDie(record.Key, &domain, &macAddress)
+			lex.DecodeOrDie(record.Key, &domain, &macAddress)
 			domains = append(domains, domain)
 			macAddresses = append(macAddresses, macAddress)
 		}
 		outputChan <- &store.Record{
 			Key:   grouper.CurrentGroupPrefix,
-			Value: key.EncodeOrDie(domains, macAddresses),
+			Value: lex.EncodeOrDie(domains, macAddresses),
 		}
 	}
 }
@@ -574,17 +574,17 @@ func joinDomainsWithSizes(inputChan, outputChan chan *store.Record) {
 
 			switch record.DatabaseIndex {
 			case 0:
-				key.DecodeOrDie(record.Value, &domains, &macAddresses)
+				lex.DecodeOrDie(record.Value, &domains, &macAddresses)
 			case 1:
 				if domains != nil && macAddresses != nil {
 					var (
 						sequenceNumber int32
 						timestamp      int64
 					)
-					key.DecodeOrDie(record.Key, &sequenceNumber, &timestamp)
+					lex.DecodeOrDie(record.Key, &sequenceNumber, &timestamp)
 					for idx, domain := range domains {
 						outputChan <- &store.Record{
-							Key:   key.EncodeOrDie(session.NodeId, domain, timestamp, macAddresses[idx], session.AnonymizationContext, session.SessionId, flowId, sequenceNumber),
+							Key:   lex.EncodeOrDie(session.NodeId, domain, timestamp, macAddresses[idx], session.AnonymizationContext, session.SessionId, flowId, sequenceNumber),
 							Value: record.Value,
 						}
 					}
@@ -606,12 +606,12 @@ func flattenIntoBytesPerDevice(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var size int64
-			key.DecodeOrDie(record.Value, &size)
+			lex.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(nodeId, macAddress, domain, timestamp),
-			Value: key.EncodeOrDie(totalSize),
+			Key:   lex.EncodeOrDie(nodeId, macAddress, domain, timestamp),
+			Value: lex.EncodeOrDie(totalSize),
 		}
 	}
 }
@@ -627,12 +627,12 @@ func flattenIntoBytesPerTimestamp(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var size int64
-			key.DecodeOrDie(record.Value, &size)
+			lex.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(nodeId, domain, timestamp),
-			Value: key.EncodeOrDie(totalSize),
+			Key:   lex.EncodeOrDie(nodeId, domain, timestamp),
+			Value: lex.EncodeOrDie(totalSize),
 		}
 	}
 }
@@ -683,8 +683,8 @@ func (store *BytesPerDomainPostgresStore) WriteRecord(record *store.Record) erro
 	var nodeId, domain []byte
 	var timestamp, size int64
 
-	key.DecodeOrDie(record.Key, &nodeId, &domain, &timestamp)
-	key.DecodeOrDie(record.Value, &size)
+	lex.DecodeOrDie(record.Key, &nodeId, &domain, &timestamp)
+	lex.DecodeOrDie(record.Value, &size)
 
 	if _, err := store.statement.Exec(nodeId, domain, time.Unix(timestamp, 0), size); err != nil {
 		return err

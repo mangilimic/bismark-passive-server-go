@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -29,7 +29,7 @@ func DisableLogging() {
 
 func formatSessionKey(sessionKey []byte) string {
 	var decoded SessionKey
-	key.DecodeOrDie(sessionKey, &decoded)
+	lex.DecodeOrDie(sessionKey, &decoded)
 	return fmt.Sprintf("%s,%s,%d", decoded.NodeId, decoded.AnonymizationContext, decoded.SessionId)
 }
 
@@ -68,13 +68,13 @@ func makeTraceKey(nodeId, anonymizationContext string, sessionId, sequenceNumber
 		SequenceNumber:       int32(sequenceNumber),
 	}
 	return &store.Record{
-		Key: key.EncodeOrDie(&traceKey),
+		Key: lex.EncodeOrDie(&traceKey),
 	}
 }
 
 func formatTraceKey(traceKey []byte) string {
 	var decoded TraceKey
-	key.DecodeOrDie(traceKey, &decoded)
+	lex.DecodeOrDie(traceKey, &decoded)
 	return fmt.Sprintf("%s,%s,%d,%d", decoded.NodeId, decoded.AnonymizationContext, decoded.SessionId, decoded.SequenceNumber)
 }
 

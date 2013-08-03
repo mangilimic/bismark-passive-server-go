@@ -6,8 +6,8 @@ import (
 	"math"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -138,7 +138,7 @@ func aggregateStatisticsReduceBySession(inputChan, outputChan chan *store.Record
 			panic(err)
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(&session),
+			Key:   lex.EncodeOrDie(&session),
 			Value: encodedStatistics,
 		}
 	}
@@ -169,7 +169,7 @@ func aggregateStatisticsReducer(inputChan, outputChan chan *store.Record) {
 			panic(err)
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(nodeId),
+			Key:   lex.EncodeOrDie(nodeId),
 			Value: encodedStatistics,
 		}
 	}
@@ -190,7 +190,7 @@ func (store *aggregateStatisticsJsonStore) BeginWriting() error {
 
 func (store *aggregateStatisticsJsonStore) WriteRecord(record *store.Record) error {
 	var nodeId string
-	key.DecodeOrDie(record.Key, &nodeId)
+	lex.DecodeOrDie(record.Key, &nodeId)
 	if store.first {
 		store.first = false
 	} else {

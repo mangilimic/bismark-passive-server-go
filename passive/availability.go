@@ -8,8 +8,8 @@ import (
 	"log"
 
 	"code.google.com/p/goprotobuf/proto"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -63,7 +63,7 @@ type intervalKey struct {
 
 func decodeIntervalKey(encodedKey []byte) *intervalKey {
 	decodedKey := new(intervalKey)
-	key.DecodeOrDie(
+	lex.DecodeOrDie(
 		encodedKey,
 		&decodedKey.NodeId,
 		&decodedKey.AnonymizationContext,
@@ -74,7 +74,7 @@ func decodeIntervalKey(encodedKey []byte) *intervalKey {
 }
 
 func encodeIntervalKey(decodedKey *intervalKey) []byte {
-	return key.EncodeOrDie(
+	return lex.EncodeOrDie(
 		decodedKey.NodeId,
 		decodedKey.AnonymizationContext,
 		decodedKey.SessionId,
@@ -101,7 +101,7 @@ func availabilityIntervals(inputChan, outputChan chan *store.Record) {
 		}
 		outputChan <- &store.Record{
 			Key:   encodeIntervalKey(&intervalKey),
-			Value: key.EncodeOrDie(*firstTraceDecoded.TraceCreationTimestamp, *lastTraceDecoded.TraceCreationTimestamp),
+			Value: lex.EncodeOrDie(*firstTraceDecoded.TraceCreationTimestamp, *lastTraceDecoded.TraceCreationTimestamp),
 		}
 	}
 
@@ -110,14 +110,14 @@ func availabilityIntervals(inputChan, outputChan chan *store.Record) {
 	var expectedTraceKey []byte
 	for record := range inputChan {
 		var traceKey TraceKey
-		key.DecodeOrDie(record.Key, &traceKey)
+		lex.DecodeOrDie(record.Key, &traceKey)
 		expectedNextTraceKeyDecoded := TraceKey{
 			NodeId:               traceKey.NodeId,
 			AnonymizationContext: traceKey.AnonymizationContext,
 			SessionId:            traceKey.SessionId,
 			SequenceNumber:       traceKey.SequenceNumber + 1,
 		}
-		expectedNextTraceKey := key.EncodeOrDie(&expectedNextTraceKeyDecoded)
+		expectedNextTraceKey := lex.EncodeOrDie(&expectedNextTraceKeyDecoded)
 
 		if !bytes.Equal(expectedTraceKey, record.Key) {
 			if firstTrace != nil {
@@ -138,8 +138,8 @@ func availabilityIntervals(inputChan, outputChan chan *store.Record) {
 func consolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) {
 	writeRecord := func(firstKey, lastKey *intervalKey, firstInterval, lastInterval []byte) {
 		var firstIntervalStart, firstIntervalEnd, lastIntervalStart, lastIntervalEnd int64
-		key.DecodeOrDie(firstInterval, &firstIntervalStart, &firstIntervalEnd)
-		key.DecodeOrDie(lastInterval, &lastIntervalStart, &lastIntervalEnd)
+		lex.DecodeOrDie(firstInterval, &firstIntervalStart, &firstIntervalEnd)
+		lex.DecodeOrDie(lastInterval, &lastIntervalStart, &lastIntervalEnd)
 		intervalKey := intervalKey{
 			NodeId:               firstKey.NodeId,
 			AnonymizationContext: firstKey.AnonymizationContext,
@@ -149,7 +149,7 @@ func consolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) 
 		}
 		outputChan <- &store.Record{
 			Key:   encodeIntervalKey(&intervalKey),
-			Value: key.EncodeOrDie(firstIntervalStart, lastIntervalEnd),
+			Value: lex.EncodeOrDie(firstIntervalStart, lastIntervalEnd),
 		}
 	}
 
@@ -163,7 +163,7 @@ func consolidateAvailabilityIntervals(inputChan, outputChan chan *store.Record) 
 			AnonymizationContext: intervalKey.AnonymizationContext,
 			SessionId:            intervalKey.SessionId,
 		}
-		sessionKeyEncoded := key.EncodeOrDie(&sessionKey)
+		sessionKeyEncoded := lex.EncodeOrDie(&sessionKey)
 
 		if !bytes.Equal(sessionKeyEncoded, previousSessionKeyEncoded) || intervalKey.FirstSequenceNumber != lastIntervalKey.LastSequenceNumber+1 {
 			if firstIntervalKey != nil {
@@ -189,7 +189,7 @@ func availabilityReducer(inputChan, outputChan chan *store.Record) {
 				log.Fatalf("Error marshaling JSON: %v", err)
 			}
 			outputChan <- &store.Record{
-				Key:   key.EncodeOrDie(currentNode),
+				Key:   lex.EncodeOrDie(currentNode),
 				Value: value,
 			}
 		}
@@ -207,7 +207,7 @@ func availabilityReducer(inputChan, outputChan chan *store.Record) {
 		}
 
 		var startTimestamp, endTimestamp int64
-		key.DecodeOrDie(record.Value, &startTimestamp, &endTimestamp)
+		lex.DecodeOrDie(record.Value, &startTimestamp, &endTimestamp)
 		if intervalKey.FirstSequenceNumber == 0 {
 			points[0] = append(points[0], startTimestamp*1000)
 			points[1] = append(points[1], endTimestamp*1000)
@@ -237,7 +237,7 @@ func (store *availabilityJsonStore) BeginWriting() error {
 
 func (store *availabilityJsonStore) WriteRecord(record *store.Record) error {
 	var nodeId string
-	key.DecodeOrDie(record.Key, &nodeId)
+	lex.DecodeOrDie(record.Key, &nodeId)
 	if store.first {
 		store.first = false
 	} else {
@@ -273,14 +273,14 @@ func generateExcludedRanges(record *store.Record) *store.Record {
 		SequenceNumber:       intervalKey.LastSequenceNumber,
 	}
 	return &store.Record{
-		Key:   key.EncodeOrDie(&newKey),
-		Value: key.EncodeOrDie(&newValue),
+		Key:   lex.EncodeOrDie(&newKey),
+		Value: lex.EncodeOrDie(&newValue),
 	}
 }
 
 func generateConsistentRanges(record *store.Record, outputChan chan *store.Record) {
 	var intervalStartKey TraceKey
-	key.DecodeOrDie(record.Key, &intervalStartKey)
+	lex.DecodeOrDie(record.Key, &intervalStartKey)
 	if intervalStartKey.SequenceNumber != 0 {
 		return
 	}

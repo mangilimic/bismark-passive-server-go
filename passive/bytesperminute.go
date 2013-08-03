@@ -8,8 +8,8 @@ import (
 
 	"code.google.com/p/goprotobuf/proto"
 	_ "github.com/bmizerany/pq"
+	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
-	"github.com/sburnett/transformer/key"
 	"github.com/sburnett/transformer/store"
 )
 
@@ -45,7 +45,7 @@ type bytesPerMinuteMapper transformer.Nonce
 
 func (nonce bytesPerMinuteMapper) Do(inputRecord *store.Record, outputChan chan *store.Record) {
 	var traceKey TraceKey
-	key.DecodeOrDie(inputRecord.Key, &traceKey)
+	lex.DecodeOrDie(inputRecord.Key, &traceKey)
 
 	trace := Trace{}
 	if err := proto.Unmarshal(inputRecord.Value, &trace); err != nil {
@@ -61,8 +61,8 @@ func (nonce bytesPerMinuteMapper) Do(inputRecord *store.Record, outputChan chan 
 
 	for timestamp, size := range buckets {
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(traceKey.NodeId, timestamp, transformer.Nonce(nonce).Get()),
-			Value: key.EncodeOrDie(size),
+			Key:   lex.EncodeOrDie(traceKey.NodeId, timestamp, transformer.Nonce(nonce).Get()),
+			Value: lex.EncodeOrDie(size),
 		}
 	}
 }
@@ -76,12 +76,12 @@ func bytesPerMinuteReducer(inputChan, outputChan chan *store.Record) {
 		for grouper.NextRecord() {
 			record := grouper.Read()
 			var size int64
-			key.DecodeOrDie(record.Value, &size)
+			lex.DecodeOrDie(record.Value, &size)
 			totalSize += size
 		}
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(node, timestamp),
-			Value: key.EncodeOrDie(totalSize),
+			Key:   lex.EncodeOrDie(node, timestamp),
+			Value: lex.EncodeOrDie(totalSize),
 		}
 	}
 }
@@ -99,14 +99,14 @@ func bytesPerHourReducer(inputChan, outputChan chan *store.Record) {
 	for record := range inputChan {
 		var node []byte
 		var timestamp int64
-		key.DecodeOrDie(record.Key, &node, &timestamp)
+		lex.DecodeOrDie(record.Key, &node, &timestamp)
 		hour := getHour(timestamp)
 
 		if !bytes.Equal(node, currentNode) || hour != currentHour {
 			if currentNode != nil && currentHour >= 0 {
 				outputChan <- &store.Record{
-					Key:   key.EncodeOrDie(currentNode, currentHour),
-					Value: key.EncodeOrDie(currentSize),
+					Key:   lex.EncodeOrDie(currentNode, currentHour),
+					Value: lex.EncodeOrDie(currentSize),
 				}
 			}
 			currentNode = node
@@ -115,13 +115,13 @@ func bytesPerHourReducer(inputChan, outputChan chan *store.Record) {
 		}
 
 		var value int64
-		key.DecodeOrDie(record.Value, &value)
+		lex.DecodeOrDie(record.Value, &value)
 		currentSize += value
 	}
 	if currentNode != nil && currentHour >= 0 {
 		outputChan <- &store.Record{
-			Key:   key.EncodeOrDie(currentNode, currentHour),
-			Value: key.EncodeOrDie(currentSize),
+			Key:   lex.EncodeOrDie(currentNode, currentHour),
+			Value: lex.EncodeOrDie(currentSize),
 		}
 	}
 }
@@ -172,8 +172,8 @@ func (store *BytesPerHourPostgresStore) WriteRecord(record *store.Record) error 
 	var nodeId []byte
 	var timestamp, size int64
 
-	key.DecodeOrDie(record.Key, &nodeId, &timestamp)
-	key.DecodeOrDie(record.Value, &size)
+	lex.DecodeOrDie(record.Key, &nodeId, &timestamp)
+	lex.DecodeOrDie(record.Value, &size)
 
 	if _, err := store.statement.Exec(nodeId, time.Unix(timestamp, 0), size); err != nil {
 		return err
