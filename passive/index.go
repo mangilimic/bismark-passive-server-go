@@ -30,8 +30,11 @@ func init() {
 	tracesIndexed = expvar.NewInt("TracesIndexed")
 }
 
-func IndexTarballsPipeline(tarballsPath string, tarnamesStore, tarnamesIndexedStore store.ReadingWriter, tracesStore store.Writer, workers int) []transformer.PipelineStage {
+func IndexTarballsPipeline(tarballsPath string, levelDbManager store.Manager, workers int) transformer.Pipeline {
 	tarballsPattern := filepath.Join(tarballsPath, "*", "*", "*.tar.gz")
+	tarnamesStore := levelDbManager.ReadingWriter("tarnames")
+	tarnamesIndexedStore := levelDbManager.ReadingWriter("tarnames-indexed")
+	tracesStore := levelDbManager.Writer("traces")
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:   "ScanTraceTarballs",

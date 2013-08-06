@@ -17,7 +17,20 @@ type FlowTimestamp struct {
 	timestamp int64
 }
 
-func BytesPerDevicePipeline(tracesStore, availabilityIntervalsStore store.Seeker, sessionsStore store.ReadingDeleter, addressTableStore, flowTableStore, packetsStore, flowIdToMacStore, flowIdToMacsStore, bytesPerDeviceUnreducedStore store.SeekingWriter, bytesPerDeviceSessionStore, bytesPerDeviceStore store.ReadingWriter, bytesPerDevicePostgresStore store.Writer, traceKeyRangesStore, consolidatedTraceKeyRangesStore store.ReadingDeleter, workers int) []transformer.PipelineStage {
+func BytesPerDevicePipeline(levelDbManager store.Manager, bytesPerDevicePostgresStore store.Writer, workers int) transformer.Pipeline {
+	tracesStore := levelDbManager.Seeker("traces")
+	availabilityIntervalsStore := levelDbManager.Seeker("consistent-ranges")
+	sessionsStore := levelDbManager.ReadingDeleter("bytesperdevice-session")
+	addressTableStore := levelDbManager.SeekingWriter("bytesperdevice-address-table")
+	flowTableStore := levelDbManager.SeekingWriter("bytesperdevice-flow-table")
+	packetsStore := levelDbManager.SeekingWriter("bytesperdevice-packets")
+	flowIdToMacStore := levelDbManager.SeekingWriter("bytesperdevice-flow-id-to-mac")
+	flowIdToMacsStore := levelDbManager.SeekingWriter("bytesperdevice-flow-id-to-macs")
+	bytesPerDeviceUnreducedStore := levelDbManager.SeekingWriter("bytesperdevice-unreduced")
+	bytesPerDeviceSessionStore := levelDbManager.ReadingWriter("bytesperdevice-reduced-sessions")
+	bytesPerDeviceStore := levelDbManager.ReadingWriter("bytesperdevice")
+	traceKeyRangesStore := levelDbManager.ReadingDeleter("bytesperdevice-trace-key-ranges")
+	consolidatedTraceKeyRangesStore := levelDbManager.ReadingDeleter("bytesperdevice-consolidated-trace-key-ranges")
 	newTracesStore := store.NewRangeExcludingReader(store.NewRangeIncludingReader(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{

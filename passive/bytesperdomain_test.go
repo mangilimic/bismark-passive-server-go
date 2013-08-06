@@ -2,7 +2,6 @@ package passive
 
 import (
 	"fmt"
-	"reflect"
 
 	"code.google.com/p/goprotobuf/proto"
 	"github.com/sburnett/lexicographic-tuples"
@@ -11,35 +10,18 @@ import (
 )
 
 func runBytesPerDomainPipeline(consistentRanges []*store.Record, allTraces ...map[string]Trace) {
-	var stores BytesPerDomainPipelineStores
+	levelDbManager := store.NewSliceManager()
 
-	availabilityIntervalsStore := store.SliceStore{}
-	stores.AvailabilityIntervals = &availabilityIntervalsStore
+	availabilityIntervalsStore := levelDbManager.Writer("consistent-ranges")
 	availabilityIntervalsStore.BeginWriting()
 	for _, record := range consistentRanges {
 		availabilityIntervalsStore.WriteRecord(record)
 	}
 	availabilityIntervalsStore.EndWriting()
 
-	tracesStore := store.SliceStore{}
-	stores.Traces = &tracesStore
+	bytesPerDomainPostgresStore := store.SliceStore{}
 
-	bytesPerDomainStore := store.SliceStore{}
-	stores.BytesPerDomain = &bytesPerDomainStore
-	bytesPerDomainPerDeviceStore := store.SliceStore{}
-	stores.BytesPerDomainPerDevice = &bytesPerDomainPerDeviceStore
-
-	// Fill in the remaining unitialized fields with new SliceStores.
-	storesValue := reflect.ValueOf(&stores).Elem()
-	modelStore := store.SliceStore{}
-	for i := 0; i < storesValue.NumField(); i++ {
-		field := storesValue.Field(i)
-		if !field.IsNil() {
-			continue
-		}
-		field.Set(reflect.New(reflect.TypeOf(modelStore)))
-	}
-
+	tracesStore := levelDbManager.Writer("traces")
 	for _, traces := range allTraces {
 		tracesStore.BeginWriting()
 		for encodedKey, trace := range traces {
@@ -51,10 +33,11 @@ func runBytesPerDomainPipeline(consistentRanges []*store.Record, allTraces ...ma
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerDomainPipeline(&stores, 1))
+		transformer.RunPipeline(BytesPerDomainPipeline(levelDbManager, &bytesPerDomainPostgresStore, 1))
 	}
 
 	fmt.Printf("BytesPerDomain:\n")
+	bytesPerDomainStore := levelDbManager.Reader("bytesperdomain-bytes-per-domain")
 	bytesPerDomainStore.BeginReading()
 	for {
 		record, err := bytesPerDomainStore.ReadRecord()
@@ -73,6 +56,7 @@ func runBytesPerDomainPipeline(consistentRanges []*store.Record, allTraces ...ma
 	bytesPerDomainStore.EndReading()
 
 	fmt.Printf("\nBytesPerDomainPerDevice:\n")
+	bytesPerDomainPerDeviceStore := levelDbManager.Reader("bytesperdomain-bytes-per-domain-per-device")
 	bytesPerDomainPerDeviceStore.BeginReading()
 	for {
 		record, err := bytesPerDomainPerDeviceStore.ReadRecord()

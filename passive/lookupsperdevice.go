@@ -9,7 +9,14 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func LookupsPerDevicePipeline(tracesStore, availabilityIntervalsStore, addressIdStore store.Seeker, addressIdToDomainStore store.SeekingWriter, lookupsPerDeviceSharded store.ReadingWriter, lookupsPerDeviceStore, lookupsPerDevicePerHourStore store.Writer, workers int) []transformer.PipelineStage {
+func LookupsPerDevicePipeline(levelDbManager store.Manager, workers int) transformer.Pipeline {
+	tracesStore := levelDbManager.Seeker("traces")
+	availabilityIntervalsStore := levelDbManager.Seeker("consistent-ranges")
+	addressIdStore := levelDbManager.Seeker("bytesperdomain-address-id-table")
+	addressIdToDomainStore := levelDbManager.SeekingWriter("lookupsperdevice-address-id-to-domain")
+	lookupsPerDeviceSharded := levelDbManager.ReadingWriter("lookupsperdevice-sharded")
+	lookupsPerDeviceStore := levelDbManager.Writer("lookupsperdevice-lookups-per-device")
+	lookupsPerDevicePerHourStore := levelDbManager.Writer("lookupsperdevice-lookups-per-device-per-hour")
 	consistentTracesStore := store.NewRangeIncludingReader(tracesStore, availabilityIntervalsStore)
 	return []transformer.PipelineStage{
 		transformer.PipelineStage{

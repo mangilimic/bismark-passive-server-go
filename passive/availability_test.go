@@ -11,7 +11,9 @@ import (
 )
 
 func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) {
-	tracesStore := store.SliceStore{}
+	levelDbManager := store.NewSliceManager()
+
+	tracesStore := levelDbManager.Writer("traces")
 	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range timestamps {
 		trace := Trace{
@@ -25,18 +27,15 @@ func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) 
 	}
 	tracesStore.EndWriting()
 
-	intervalsStore := store.SliceStore{}
-	consolidatedStore := store.SliceStore{}
-	nodesStore := store.SliceStore{}
 	writer := bytes.NewBuffer([]byte{})
-	excludeRangesStore := store.SliceStore{}
-	consistentRangesStore := store.SliceStore{}
-	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1))
+	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, writer, startTimestamp, 1))
 	fmt.Printf("%s", writer.Bytes())
 }
 
 func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[string]int64, moreTimestamps map[string]int64) {
-	tracesStore := store.SliceStore{}
+	levelDbManager := store.NewSliceManager()
+
+	tracesStore := levelDbManager.Writer("traces")
 	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range timestamps {
 		trace := Trace{
@@ -50,13 +49,8 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 	}
 	tracesStore.EndWriting()
 
-	intervalsStore := store.SliceStore{}
-	consolidatedStore := store.SliceStore{}
-	nodesStore := store.SliceStore{}
 	writer := bytes.NewBuffer([]byte{})
-	excludeRangesStore := store.SliceStore{}
-	consistentRangesStore := store.SliceStore{}
-	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, writer, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1))
+	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, writer, startTimestamp, 1))
 
 	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range moreTimestamps {
@@ -84,7 +78,7 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 	}
 
 	anotherWriter := bytes.NewBuffer([]byte{})
-	transformer.RunPipeline(AvailabilityPipeline(&tracesStore, &intervalsStore, &consolidatedStore, &nodesStore, anotherWriter, &excludeRangesStore, &consistentRangesStore, startTimestamp, 1))
+	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, anotherWriter, startTimestamp, 1))
 	fmt.Printf("%s", anotherWriter.Bytes())
 }
 

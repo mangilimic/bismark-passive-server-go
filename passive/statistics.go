@@ -11,7 +11,15 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func AggregateStatisticsPipeline(tracesStore, availabilityIntervalsStore store.Seeker, traceAggregatesStore store.SeekingWriter, sessionAggregatesStore store.ReadingWriter, nodeAggregatesStore store.ReadingWriter, jsonWriter io.Writer, sessionsStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore store.ReadingDeleter, workers int) []transformer.PipelineStage {
+func AggregateStatisticsPipeline(levelDbManager store.Manager, jsonWriter io.Writer, workers int) transformer.Pipeline {
+	tracesStore := levelDbManager.Seeker("traces")
+	availabilityIntervalsStore := levelDbManager.Seeker("consistent-ranges")
+	traceAggregatesStore := levelDbManager.SeekingWriter("statistics-trace-aggregates")
+	sessionAggregatesStore := levelDbManager.ReadingWriter("statistics-session-aggregates")
+	nodeAggregatesStore := levelDbManager.ReadingWriter("statistics-node-aggregates")
+	sessionsStore := levelDbManager.ReadingDeleter("statistics-sessions")
+	traceKeyRangesStore := levelDbManager.ReadingDeleter("statistics-trace-key-ranges")
+	consolidatedTraceKeyRangesStore := levelDbManager.ReadingDeleter("statistics-consolidated-trace-key-ranges")
 	newTracesStore := store.NewRangeExcludingReader(store.NewRangeIncludingReader(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{

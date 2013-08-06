@@ -14,116 +14,113 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-type BytesPerDomainPipelineStores struct {
-	Traces                                     store.Seeker
-	AvailabilityIntervals                      store.Seeker
-	TraceKeyRanges, ConsolidatedTraceKeyRanges store.ReadingDeleter
-
-	// Outputs of the first stage.
-	AddressIdTable           store.SeekingWriter
-	ARecordTable             store.SeekingWriter
-	CnameRecordTable         store.SeekingWriter
-	FlowIpsTable             store.SeekingWriter
-	AddressIpTable           store.SeekingWriter
-	BytesPerTimestampSharded store.SeekingWriter
-	Whitelist                store.SeekingWriter
-
-	ARecordsWithMac, CnameRecordsWithMac, AllDnsMappings, AllWhitelistedMappings store.SeekingWriter
-	FlowMacsTable, FlowDomainsTable, FlowDomainsGroupedTable                     store.SeekingWriter
-
-	BytesPerDomainSharded                   store.ReadingWriter
-	BytesPerDomainPerDevice, BytesPerDomain store.ReadingWriter
-
-	BytesPerDomainPostgres store.Writer
-
-	Sessions store.ReadingDeleter
-}
-
-func BytesPerDomainPipeline(stores *BytesPerDomainPipelineStores, workers int) []transformer.PipelineStage {
+func BytesPerDomainPipeline(levelDbManager store.Manager, bytesPerDomainPostgresStore store.Writer, workers int) transformer.Pipeline {
+	tracesStore := levelDbManager.Seeker("traces")
+	availabilityIntervalsStore := levelDbManager.Seeker("consistent-ranges")
+	traceKeyRangesStore := levelDbManager.ReadingDeleter("bytesperdomain-trace-key-ranges")
+	consolidatedTraceKeyRangesStore := levelDbManager.ReadingDeleter("bytesperdomain-consolidated-trace-key-ranges")
+	addressIdTableStore := levelDbManager.SeekingWriter("bytesperdomain-address-id-table")
+	aRecordTableStore := levelDbManager.SeekingWriter("bytesperdomain-a-record-table")
+	cnameRecordTableStore := levelDbManager.SeekingWriter("bytesperdomain-cname-record-table")
+	flowIpsTableStore := levelDbManager.SeekingWriter("bytesperdomain-flow-ips-table")
+	addressIpTableStore := levelDbManager.SeekingWriter("bytesperdomain-address-ip-table")
+	bytesPerTimestampShardedStore := levelDbManager.SeekingWriter("bytesperdomain-bytes-per-timestamp-sharded")
+	whitelistStore := levelDbManager.SeekingWriter("bytesperdomain-whitelist")
+	aRecordsWithMacStore := levelDbManager.SeekingWriter("bytesperdomain-a-records-with-mac")
+	cnameRecordsWithMacStore := levelDbManager.SeekingWriter("bytesperdomain-cname-records-with-mac")
+	allDnsMappingsStore := levelDbManager.SeekingWriter("bytesperdomain-all-dns-mappings")
+	allWhitelistedMappingsStore := levelDbManager.SeekingWriter("bytesperdomain-all-whitelisted-mappings")
+	flowMacsTableStore := levelDbManager.SeekingWriter("bytesperdomain-flow-macs-table")
+	flowDomainsTableStore := levelDbManager.SeekingWriter("bytesperdomain-flow-domains-table")
+	flowDomainsGroupedTableStore := levelDbManager.SeekingWriter("bytesperdomain-flow-domains-grouped-table")
+	bytesPerDomainShardedStore := levelDbManager.ReadingWriter("bytesperdomain-bytes-per-domain-sharded")
+	bytesPerDomainPerDeviceStore := levelDbManager.ReadingWriter("bytesperdomain-bytes-per-domain-per-device")
+	bytesPerDomainStore := levelDbManager.ReadingWriter("bytesperdomain-bytes-per-domain")
+	sessionsStore := levelDbManager.ReadingDeleter("bytesperdomain-sessions")
 	excludeOldSessions := func(stor store.Seeker) store.Seeker {
-		return store.NewPrefixIncludingReader(stor, stores.Sessions)
+		return store.NewPrefixIncludingReader(stor, sessionsStore)
 	}
-	newTracesStore := store.NewRangeExcludingReader(store.NewRangeIncludingReader(stores.Traces, stores.AvailabilityIntervals), stores.TraceKeyRanges)
+	newTracesStore := store.NewRangeExcludingReader(store.NewRangeIncludingReader(tracesStore, availabilityIntervalsStore), traceKeyRangesStore)
 	return append([]transformer.PipelineStage{
 		transformer.PipelineStage{
 			Name:        "BytesPerDomainMapper",
 			Reader:      newTracesStore,
 			Transformer: transformer.MakeMultipleOutputsDoFunc(bytesPerDomainMapper, 7, workers),
-			Writer:      store.NewMuxingWriter(stores.AddressIdTable, stores.ARecordTable, stores.CnameRecordTable, stores.FlowIpsTable, stores.AddressIpTable, stores.BytesPerTimestampSharded, stores.Whitelist),
+			Writer:      store.NewMuxingWriter(addressIdTableStore, aRecordTableStore, cnameRecordTableStore, flowIpsTableStore, addressIpTableStore, bytesPerTimestampShardedStore, whitelistStore),
 		},
-		SessionPipelineStage(newTracesStore, stores.Sessions),
+		SessionPipelineStage(newTracesStore, sessionsStore),
 		transformer.PipelineStage{
 			Name:        "JoinAAddressIdsWithMacAddresses",
-			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AddressIdTable, stores.ARecordTable)),
+			Reader:      excludeOldSessions(store.NewDemuxingSeeker(addressIdTableStore, aRecordTableStore)),
 			Transformer: transformer.TransformFunc(joinAddressIdsWithMacAddresses),
-			Writer:      stores.ARecordsWithMac,
+			Writer:      aRecordsWithMacStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinCnameAddressIdsWithMacAddresses",
-			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AddressIdTable, stores.CnameRecordTable)),
+			Reader:      excludeOldSessions(store.NewDemuxingSeeker(addressIdTableStore, cnameRecordTableStore)),
 			Transformer: transformer.TransformFunc(joinAddressIdsWithMacAddresses),
-			Writer:      stores.CnameRecordsWithMac,
+			Writer:      cnameRecordsWithMacStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinARecordsWithCnameRecords",
-			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.ARecordsWithMac, stores.CnameRecordsWithMac)),
+			Reader:      excludeOldSessions(store.NewDemuxingSeeker(aRecordsWithMacStore, cnameRecordsWithMacStore)),
 			Transformer: transformer.TransformFunc(joinARecordsWithCnameRecords),
-			Writer:      stores.AllDnsMappings,
+			Writer:      allDnsMappingsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "EmitARecords",
-			Reader:      excludeOldSessions(stores.ARecordsWithMac),
+			Reader:      excludeOldSessions(aRecordsWithMacStore),
 			Transformer: transformer.MakeDoFunc(emitARecords, workers),
-			Writer:      stores.AllDnsMappings,
+			Writer:      allDnsMappingsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinDomainsWithWhitelist",
-			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.Whitelist, stores.AllDnsMappings)),
+			Reader:      excludeOldSessions(store.NewDemuxingSeeker(whitelistStore, allDnsMappingsStore)),
 			Transformer: transformer.TransformFunc(joinDomainsWithWhitelist),
-			Writer:      stores.AllWhitelistedMappings,
+			Writer:      allWhitelistedMappingsStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinMacWithFlowId",
-			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AddressIpTable, stores.FlowIpsTable)),
+			Reader:      excludeOldSessions(store.NewDemuxingSeeker(addressIpTableStore, flowIpsTableStore)),
 			Transformer: transformer.TransformFunc(joinMacWithFlowId),
-			Writer:      stores.FlowMacsTable,
+			Writer:      flowMacsTableStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinWhitelistedDomainsWithFlows",
-			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.AllWhitelistedMappings, stores.FlowMacsTable)),
+			Reader:      excludeOldSessions(store.NewDemuxingSeeker(allWhitelistedMappingsStore, flowMacsTableStore)),
 			Transformer: transformer.TransformFunc(joinWhitelistedDomainsWithFlows),
-			Writer:      stores.FlowDomainsTable,
+			Writer:      flowDomainsTableStore,
 		},
 		transformer.PipelineStage{
 			Name:        "GroupDomainsAndMacAddresses",
-			Reader:      excludeOldSessions(stores.FlowDomainsTable),
+			Reader:      excludeOldSessions(flowDomainsTableStore),
 			Transformer: transformer.TransformFunc(groupDomainsAndMacAddresses),
-			Writer:      stores.FlowDomainsGroupedTable,
+			Writer:      flowDomainsGroupedTableStore,
 		},
 		transformer.PipelineStage{
 			Name:        "JoinDomainsWithSizes",
-			Reader:      excludeOldSessions(store.NewDemuxingSeeker(stores.FlowDomainsGroupedTable, stores.BytesPerTimestampSharded)),
+			Reader:      excludeOldSessions(store.NewDemuxingSeeker(flowDomainsGroupedTableStore, bytesPerTimestampShardedStore)),
 			Transformer: transformer.TransformFunc(joinDomainsWithSizes),
-			Writer:      stores.BytesPerDomainSharded,
+			Writer:      bytesPerDomainShardedStore,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenIntoBytesPerDevice",
-			Reader:      stores.BytesPerDomainSharded,
+			Reader:      bytesPerDomainShardedStore,
 			Transformer: transformer.TransformFunc(flattenIntoBytesPerDevice),
-			Writer:      stores.BytesPerDomainPerDevice,
+			Writer:      bytesPerDomainPerDeviceStore,
 		},
 		transformer.PipelineStage{
 			Name:        "FlattenIntoBytesPerTimestamp",
-			Reader:      stores.BytesPerDomainSharded,
+			Reader:      bytesPerDomainShardedStore,
 			Transformer: transformer.TransformFunc(flattenIntoBytesPerTimestamp),
-			Writer:      stores.BytesPerDomain,
+			Writer:      bytesPerDomainStore,
 		},
 		transformer.PipelineStage{
 			Name:   "BytesPerDomainPostgresStore",
-			Reader: stores.BytesPerDomain,
-			Writer: stores.BytesPerDomainPostgres,
+			Reader: bytesPerDomainStore,
+			Writer: bytesPerDomainPostgresStore,
 		},
-	}, TraceKeyRangesPipeline(newTracesStore, stores.TraceKeyRanges, stores.ConsolidatedTraceKeyRanges)...)
+	}, TraceKeyRangesPipeline(newTracesStore, traceKeyRangesStore, consolidatedTraceKeyRangesStore)...)
 }
 
 func mapTraceToAddressIdTable(traceKey *TraceKey, trace *Trace, outputChan chan *store.Record) {

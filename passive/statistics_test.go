@@ -31,20 +31,18 @@ func makeTraceWithStatistics(packetSizes []int, packetsDropped, pcapDropped, int
 }
 
 func runAggregateStatisticsPipeline(consistentRanges []*store.Record, allTraces ...map[string]Trace) {
-	tracesStore := store.SliceStore{}
-	availabilityIntervalsStore := store.SliceStore{}
+	levelDbManager := store.NewSliceManager()
+
+	availabilityIntervalsStore := levelDbManager.Writer("consistent-ranges")
 	availabilityIntervalsStore.BeginWriting()
 	for _, record := range consistentRanges {
 		availabilityIntervalsStore.WriteRecord(record)
 	}
 	availabilityIntervalsStore.EndWriting()
-	traceAggregatesStore := store.SliceStore{}
-	sessionAggregatesStore := store.SliceStore{}
-	nodeAggregatesStore := store.SliceStore{}
+
 	var writer *bytes.Buffer
-	sessionsStore := store.SliceStore{}
-	traceKeyRangesStore := store.SliceStore{}
-	consolidatedTraceKeyRangesStore := store.SliceStore{}
+
+	tracesStore := levelDbManager.Writer("traces")
 	for _, traces := range allTraces {
 		tracesStore.BeginWriting()
 		for encodedKey, trace := range traces {
@@ -58,7 +56,7 @@ func runAggregateStatisticsPipeline(consistentRanges []*store.Record, allTraces 
 
 		writer = bytes.NewBuffer([]byte{})
 
-		transformer.RunPipeline(AggregateStatisticsPipeline(&tracesStore, &availabilityIntervalsStore, &traceAggregatesStore, &sessionAggregatesStore, &nodeAggregatesStore, writer, &sessionsStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1))
+		transformer.RunPipeline(AggregateStatisticsPipeline(levelDbManager, writer, 1))
 	}
 	fmt.Printf("%s", writer.Bytes())
 }

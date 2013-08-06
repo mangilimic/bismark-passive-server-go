@@ -1,6 +1,7 @@
 package passive
 
 import (
+	"fmt"
 	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
 	"github.com/sburnett/transformer/store"
@@ -11,7 +12,10 @@ type filterSessions struct {
 	SessionEndTime   int64
 }
 
-func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, tracesStore, traceKeyRangesStore store.Reader, filteredStore store.Writer) []transformer.PipelineStage {
+func FilterSessionsPipeline(sessionStartTime, sessionEndTime int64, levelDbManager store.Manager, outputName string) transformer.Pipeline {
+	tracesStore := levelDbManager.Reader("traces")
+	traceKeyRangesStore := levelDbManager.Reader("availability-done")
+	filteredStore := levelDbManager.Writer(outputName)
 	parameters := filterSessions{
 		SessionStartTime: sessionStartTime * 1000000,
 		SessionEndTime:   sessionEndTime * 1000000,
@@ -45,4 +49,28 @@ func (parameters filterSessions) Do(inputChan, outputChan chan *store.Record) {
 			outputChan <- record
 		}
 	}
+}
+
+func FilterNodesPipeline(nodeId string, levelDbManager store.Manager) transformer.Pipeline {
+	tracesStore := levelDbManager.Seeker("traces")
+	filteredStore := levelDbManager.Writer(fmt.Sprintf("filtered-%s", nodeId))
+	return []transformer.PipelineStage{
+		transformer.PipelineStage{
+			Name:   "FilterNode",
+			Reader: FilterNodes(tracesStore, nodeId),
+			Writer: filteredStore,
+		},
+	}
+}
+
+func FilterNodes(reader store.Seeker, nodes ...string) store.Seeker {
+	nodesStore := store.SliceStore{}
+	nodesStore.BeginWriting()
+	for _, node := range nodes {
+		nodesStore.WriteRecord(&store.Record{
+			Key: lex.EncodeOrDie(node),
+		})
+	}
+	nodesStore.EndWriting()
+	return store.NewPrefixIncludingReader(reader, &nodesStore)
 }

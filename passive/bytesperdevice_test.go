@@ -10,26 +10,18 @@ import (
 )
 
 func runBytesPerDevicePipeline(consistentRanges []*store.Record, allTraces ...map[string]Trace) {
-	tracesStore := store.SliceStore{}
-	availabilityIntervalsStore := store.SliceStore{}
+	levelDbManager := store.NewSliceManager()
+
+	availabilityIntervalsStore := levelDbManager.Writer("consistent-ranges")
 	availabilityIntervalsStore.BeginWriting()
 	for _, record := range consistentRanges {
 		availabilityIntervalsStore.WriteRecord(record)
 	}
 	availabilityIntervalsStore.EndWriting()
-	sessionsStore := store.SliceStore{}
-	addressTableStore := store.SliceStore{}
-	flowTableStore := store.SliceStore{}
-	packetsStore := store.SliceStore{}
-	flowIdToMacStore := store.SliceStore{}
-	flowIdToMacsStore := store.SliceStore{}
-	bytesPerDeviceUnreducedStore := store.SliceStore{}
-	bytesPerDeviceStore := store.SliceStore{}
-	bytesPerDeviceSessionStore := store.SliceStore{}
-	bytesPerDevicePostgresStore := store.SliceStore{}
-	traceKeyRangesStore := store.SliceStore{}
-	consolidatedTraceKeyRangesStore := store.SliceStore{}
 
+	bytesPerDevicePostgresStore := store.SliceStore{}
+
+	tracesStore := levelDbManager.Writer("traces")
 	for _, traces := range allTraces {
 		tracesStore.BeginWriting()
 		for encodedKey, trace := range traces {
@@ -41,9 +33,10 @@ func runBytesPerDevicePipeline(consistentRanges []*store.Record, allTraces ...ma
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &sessionsStore, &addressTableStore, &flowTableStore, &packetsStore, &flowIdToMacStore, &flowIdToMacsStore, &bytesPerDeviceUnreducedStore, &bytesPerDeviceSessionStore, &bytesPerDeviceStore, &bytesPerDevicePostgresStore, &traceKeyRangesStore, &consolidatedTraceKeyRangesStore, 1))
+		transformer.RunPipeline(BytesPerDevicePipeline(levelDbManager, &bytesPerDevicePostgresStore, 1))
 	}
 
+	bytesPerDeviceStore := levelDbManager.Reader("bytesperdevice")
 	bytesPerDeviceStore.BeginReading()
 	for {
 		record, err := bytesPerDeviceStore.ReadRecord()

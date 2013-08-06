@@ -10,7 +10,9 @@ import (
 )
 
 func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*store.Record, addressIdToMac map[string]string) {
-	tracesStore := store.SliceStore{}
+	levelDbManager := store.NewSliceManager()
+
+	tracesStore := levelDbManager.Writer("traces")
 	tracesStore.BeginWriting()
 	for encodedKey, trace := range traces {
 		encodedTrace, err := proto.Marshal(&trace)
@@ -21,28 +23,24 @@ func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*st
 	}
 	tracesStore.EndWriting()
 
-	availabilityIntervalsStore := store.SliceStore{}
+	availabilityIntervalsStore := levelDbManager.Writer("consistent-ranges")
 	availabilityIntervalsStore.BeginWriting()
 	for _, record := range consistentRanges {
 		availabilityIntervalsStore.WriteRecord(record)
 	}
 	availabilityIntervalsStore.EndWriting()
 
-	addressIdStore := store.SliceStore{}
+	addressIdStore := levelDbManager.Writer("bytesperdomain-address-id-table")
 	addressIdStore.BeginWriting()
 	for encodedKey, encodedValue := range addressIdToMac {
 		addressIdStore.WriteRecord(&store.Record{Key: []byte(encodedKey), Value: []byte(encodedValue)})
 	}
 	addressIdStore.EndWriting()
 
-	addressIdToDomainStore := store.SliceStore{}
-	lookupsPerDeviceSharded := store.SliceStore{}
-	lookupsPerDeviceStore := store.SliceStore{}
-	lookupsPerDevicePerHourStore := store.SliceStore{}
-
-	transformer.RunPipeline(LookupsPerDevicePipeline(&tracesStore, &availabilityIntervalsStore, &addressIdStore, &addressIdToDomainStore, &lookupsPerDeviceSharded, &lookupsPerDeviceStore, &lookupsPerDevicePerHourStore, 1))
+	transformer.RunPipeline(LookupsPerDevicePipeline(levelDbManager, 1))
 
 	fmt.Printf("LookupsPerDevice:\n")
+	lookupsPerDeviceStore := levelDbManager.Reader("lookupsperdevice-lookups-per-device")
 	lookupsPerDeviceStore.BeginReading()
 	for {
 		record, err := lookupsPerDeviceStore.ReadRecord()
@@ -63,6 +61,7 @@ func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*st
 	lookupsPerDeviceStore.EndReading()
 
 	fmt.Printf("\nLookupsPerDevicePerHour:\n")
+	lookupsPerDevicePerHourStore := levelDbManager.Reader("lookupsperdevice-lookups-per-device-per-hour")
 	lookupsPerDevicePerHourStore.BeginReading()
 	for {
 		record, err := lookupsPerDevicePerHourStore.ReadRecord()
