@@ -3,6 +3,7 @@ package passive
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
@@ -277,6 +278,12 @@ func bytesPerDomainMapper(record *store.Record, outputChans ...chan *store.Recor
 	if err := proto.Unmarshal(record.Value, &trace); err != nil {
 		panic(err)
 	}
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("Error mapping trace %s,%s,%d,%d: %s", *trace.NodeId, *trace.AnonymizationSignature, *trace.ProcessStartTimeMicroseconds, *trace.TraceCreationTimestamp, err)
+		}
+	}()
 
 	mappers := []traceMapper{
 		mapTraceToAddressIdTable,
