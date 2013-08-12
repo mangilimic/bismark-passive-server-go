@@ -15,7 +15,7 @@ import (
 
 func AvailabilityPipeline(levelDbManager store.Manager, jsonWriter io.Writer, timestamp int64, workers int) transformer.Pipeline {
 	tracesStore := levelDbManager.Seeker("traces")
-	intervalsStore := levelDbManager.ReadingWriter("availablity-intervals")
+	intervalsStore := levelDbManager.ReadingWriter("availability-intervals")
 	consolidatedStore := levelDbManager.ReadingDeleter("availability-consolidated")
 	nodesStore := levelDbManager.ReadingDeleter("availability-nodes")
 	excludeRangesStore := levelDbManager.ReadingDeleter("availability-done")
