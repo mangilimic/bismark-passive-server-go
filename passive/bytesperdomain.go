@@ -15,7 +15,7 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func BytesPerDomainPipeline(levelDbManager store.Manager, bytesPerDomainPostgresStore store.Writer, workers int) transformer.Pipeline {
+func BytesPerDomainPipeline(levelDbManager store.Manager, bytesPerDomainPostgresStore store.Writer) transformer.Pipeline {
 	tracesStore := levelDbManager.Seeker("traces")
 	availabilityIntervalsStore := levelDbManager.Seeker("consistent-ranges")
 	traceKeyRangesStore := levelDbManager.ReadingDeleter("bytesperdomain-trace-key-ranges")
@@ -46,7 +46,7 @@ func BytesPerDomainPipeline(levelDbManager store.Manager, bytesPerDomainPostgres
 		transformer.PipelineStage{
 			Name:        "BytesPerDomainMapper",
 			Reader:      newTracesStore,
-			Transformer: transformer.MakeMultipleOutputsDoFunc(bytesPerDomainMapper, 7, workers),
+			Transformer: transformer.MakeMultipleOutputsDoFunc(bytesPerDomainMapper, 7),
 			Writer:      store.NewMuxingWriter(addressIdTableStore, aRecordTableStore, cnameRecordTableStore, flowIpsTableStore, addressIpTableStore, bytesPerTimestampShardedStore, whitelistStore),
 		},
 		SessionPipelineStage(newTracesStore, sessionsStore),
@@ -71,7 +71,7 @@ func BytesPerDomainPipeline(levelDbManager store.Manager, bytesPerDomainPostgres
 		transformer.PipelineStage{
 			Name:        "EmitARecords",
 			Reader:      excludeOldSessions(aRecordsWithMacStore),
-			Transformer: transformer.MakeDoFunc(emitARecords, workers),
+			Transformer: transformer.MakeDoFunc(emitARecords),
 			Writer:      allDnsMappingsStore,
 		},
 		transformer.PipelineStage{

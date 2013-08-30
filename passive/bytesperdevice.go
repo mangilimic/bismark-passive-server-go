@@ -17,7 +17,7 @@ type FlowTimestamp struct {
 	timestamp int64
 }
 
-func BytesPerDevicePipeline(levelDbManager store.Manager, bytesPerDevicePostgresStore store.Writer, workers int) transformer.Pipeline {
+func BytesPerDevicePipeline(levelDbManager store.Manager, bytesPerDevicePostgresStore store.Writer) transformer.Pipeline {
 	tracesStore := levelDbManager.Seeker("traces")
 	availabilityIntervalsStore := levelDbManager.Seeker("consistent-ranges")
 	sessionsStore := levelDbManager.ReadingDeleter("bytesperdevice-session")
@@ -36,7 +36,7 @@ func BytesPerDevicePipeline(levelDbManager store.Manager, bytesPerDevicePostgres
 		transformer.PipelineStage{
 			Name:        "BytesPerDeviceMapper",
 			Reader:      newTracesStore,
-			Transformer: transformer.MakeMultipleOutputsDoFunc(bytesPerDeviceMapper, 3, workers),
+			Transformer: transformer.MakeMultipleOutputsDoFunc(bytesPerDeviceMapper, 3),
 			Writer:      store.NewMuxingWriter(addressTableStore, flowTableStore, packetsStore),
 		},
 		SessionPipelineStage(newTracesStore, sessionsStore),

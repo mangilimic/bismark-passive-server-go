@@ -13,7 +13,7 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func AvailabilityPipeline(levelDbManager store.Manager, jsonWriter io.Writer, timestamp int64, workers int) transformer.Pipeline {
+func AvailabilityPipeline(levelDbManager store.Manager, jsonWriter io.Writer, timestamp int64) transformer.Pipeline {
 	tracesStore := levelDbManager.Seeker("traces")
 	intervalsStore := levelDbManager.ReadingWriter("availability-intervals")
 	consolidatedStore := levelDbManager.ReadingDeleter("availability-consolidated")
@@ -47,13 +47,13 @@ func AvailabilityPipeline(levelDbManager store.Manager, jsonWriter io.Writer, ti
 		transformer.PipelineStage{
 			Name:        "GenerateExcludedRanges",
 			Reader:      consolidatedStore,
-			Transformer: transformer.MakeMapFunc(generateExcludedRanges, workers),
+			Transformer: transformer.MakeMapFunc(generateExcludedRanges),
 			Writer:      store.NewTruncatingWriter(excludeRangesStore),
 		},
 		transformer.PipelineStage{
 			Name:        "GenerateConsistentRanges",
 			Reader:      excludeRangesStore,
-			Transformer: transformer.MakeDoFunc(generateConsistentRanges, workers),
+			Transformer: transformer.MakeDoFunc(generateConsistentRanges),
 			Writer:      store.NewTruncatingWriter(consistentRangesStore),
 		},
 	}

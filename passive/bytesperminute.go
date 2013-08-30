@@ -13,7 +13,7 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func BytesPerMinutePipeline(levelDbManager store.Manager, bytesPerHourPostgresStore store.Writer, workers int) transformer.Pipeline {
+func BytesPerMinutePipeline(levelDbManager store.Manager, bytesPerHourPostgresStore store.Writer) transformer.Pipeline {
 	tracesStore := levelDbManager.Seeker("traces")
 	mappedStore := levelDbManager.ReadingWriter("bytesperminute-mapped")
 	bytesPerMinuteStore := levelDbManager.ReadingWriter("bytesperminute")
@@ -24,7 +24,7 @@ func BytesPerMinutePipeline(levelDbManager store.Manager, bytesPerHourPostgresSt
 		transformer.PipelineStage{
 			Name:        "BytesPerMinuteMapper",
 			Reader:      store.NewRangeExcludingReader(tracesStore, traceKeyRangesStore),
-			Transformer: transformer.MakeDoTransformer(bytesPerMinuteMapper(transformer.NewNonce()), workers),
+			Transformer: transformer.MakeDoTransformer(bytesPerMinuteMapper(transformer.NewNonce())),
 			Writer:      mappedStore,
 		},
 		transformer.PipelineStage{

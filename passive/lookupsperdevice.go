@@ -9,7 +9,7 @@ import (
 	"github.com/sburnett/transformer/store"
 )
 
-func LookupsPerDevicePipeline(levelDbManager store.Manager, workers int) transformer.Pipeline {
+func LookupsPerDevicePipeline(levelDbManager store.Manager) transformer.Pipeline {
 	tracesStore := levelDbManager.Seeker("traces")
 	availabilityIntervalsStore := levelDbManager.Seeker("consistent-ranges")
 	addressIdStore := levelDbManager.Seeker("bytesperdomain-address-id-table")
@@ -22,7 +22,7 @@ func LookupsPerDevicePipeline(levelDbManager store.Manager, workers int) transfo
 		transformer.PipelineStage{
 			Name:        "LookupsPerDeviceMapper",
 			Reader:      consistentTracesStore,
-			Transformer: transformer.MakeDoFunc(lookupsPerDeviceMapper, workers),
+			Transformer: transformer.MakeDoFunc(lookupsPerDeviceMapper),
 			Writer:      addressIdToDomainStore,
 		},
 		transformer.PipelineStage{
