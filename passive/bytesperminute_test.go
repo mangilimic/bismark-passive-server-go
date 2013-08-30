@@ -34,7 +34,7 @@ func runBytesPerMinutePipeline(allTraces ...map[string]Trace) {
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerMinutePipeline(levelDbManager, &bytesPerHourPostgresStore, 1))
+		transformer.RunPipeline(BytesPerMinutePipeline(levelDbManager, &bytesPerHourPostgresStore))
 	}
 
 	bytesPerMinuteStore := levelDbManager.Reader("bytesperminute")

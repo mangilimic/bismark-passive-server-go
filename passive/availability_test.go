@@ -28,7 +28,7 @@ func runAvailabilityPipeline(startTimestamp int64, timestamps map[string]int64) 
 	tracesStore.EndWriting()
 
 	writer := bytes.NewBuffer([]byte{})
-	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, writer, startTimestamp, 1))
+	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, writer, startTimestamp))
 	fmt.Printf("%s", writer.Bytes())
 }
 
@@ -50,7 +50,7 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 	tracesStore.EndWriting()
 
 	writer := bytes.NewBuffer([]byte{})
-	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, writer, startTimestamp, 1))
+	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, writer, startTimestamp))
 
 	tracesStore.BeginWriting()
 	for encodedKey, timestamp := range moreTimestamps {
@@ -78,7 +78,7 @@ func runAvailabilityPipelineAugmented(startTimestamp int64, timestamps map[strin
 	}
 
 	anotherWriter := bytes.NewBuffer([]byte{})
-	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, anotherWriter, startTimestamp, 1))
+	transformer.RunPipeline(AvailabilityPipeline(levelDbManager, anotherWriter, startTimestamp))
 	fmt.Printf("%s", anotherWriter.Bytes())
 }
 

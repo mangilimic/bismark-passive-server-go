@@ -33,7 +33,7 @@ func runBytesPerDevicePipeline(consistentRanges []*store.Record, allTraces ...ma
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerDevicePipeline(levelDbManager, &bytesPerDevicePostgresStore, 1))
+		transformer.RunPipeline(BytesPerDevicePipeline(levelDbManager, &bytesPerDevicePostgresStore))
 	}
 
 	bytesPerDeviceStore := levelDbManager.Reader("bytesperdevice")

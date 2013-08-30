@@ -33,7 +33,7 @@ func runBytesPerDomainPipeline(consistentRanges []*store.Record, allTraces ...ma
 		}
 		tracesStore.EndWriting()
 
-		transformer.RunPipeline(BytesPerDomainPipeline(levelDbManager, &bytesPerDomainPostgresStore, 1))
+		transformer.RunPipeline(BytesPerDomainPipeline(levelDbManager, &bytesPerDomainPostgresStore))
 	}
 
 	fmt.Printf("BytesPerDomain:\n")

@@ -37,7 +37,7 @@ func runLookupsPerDevicePipeline(traces map[string]Trace, consistentRanges []*st
 	}
 	addressIdStore.EndWriting()
 
-	transformer.RunPipeline(LookupsPerDevicePipeline(levelDbManager, 1))
+	transformer.RunPipeline(LookupsPerDevicePipeline(levelDbManager))
 
 	fmt.Printf("LookupsPerDevice:\n")
 	lookupsPerDeviceStore := levelDbManager.Reader("lookupsperdevice-lookups-per-device")

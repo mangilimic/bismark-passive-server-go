@@ -56,7 +56,7 @@ func runAggregateStatisticsPipeline(consistentRanges []*store.Record, allTraces 
 
 		writer = bytes.NewBuffer([]byte{})
 
-		transformer.RunPipeline(AggregateStatisticsPipeline(levelDbManager, writer, 1))
+		transformer.RunPipeline(AggregateStatisticsPipeline(levelDbManager, writer))
 	}
 	fmt.Printf("%s", writer.Bytes())
 }
