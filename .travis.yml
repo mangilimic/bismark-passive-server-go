@@ -1,5 +1,5 @@
 language: go
-go: 1.1
+go: 1.3
 before_install:
     - git clone https://code.google.com/p/leveldb/ /tmp/leveldb
     - make -C /tmp/leveldb
