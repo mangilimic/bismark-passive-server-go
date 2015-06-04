@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"code.google.com/p/goprotobuf/proto"
+	"github.com/golang/protobuf/proto"
 	_ "github.com/bmizerany/pq"
 	"github.com/sburnett/lexicographic-tuples"
 	"github.com/sburnett/transformer"
